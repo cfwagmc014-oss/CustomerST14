@@ -110,9 +110,16 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
 
   <div id="pDash" class="wrap hide"></div>
   <div id="pExport" class="wrap hide"></div>
+  <div id="pFind" class="wrap hide">
+    <div class="box"><h3>ตรวจสอบว่าลูกค้าอยู่ในพอร์ตของใคร</h3>
+      <input id="findQ" type="search" placeholder="พิมพ์ชื่อ / ชื่อร้าน / รหัสสมาชิก (อย่างน้อย 3 ตัวอักษร)">
+      <p class="mut" style="margin:6px 0 0">ค้นได้ทั้งสาขา ทุกพอร์ต · แสดงเฉพาะผู้ดูแลและข้อมูลทั่วไป</p></div>
+    <div id="findRes"></div>
+  </div>
 
   <nav class="bottom">
     <button data-tab="List" class="on"><b>📋</b>รายชื่อ</button>
+    <button data-tab="Find"><b>🔎</b>ค้นหาพอร์ต</button>
     <button data-tab="Dash"><b>📊</b>สรุปผล</button>
     <button data-tab="Export"><b>⬇️</b>Export</button>
   </nav>
@@ -173,6 +180,9 @@ async function demoApi(action,p){
     const want={};rows.forEach(r=>want[r[0]]=1);
     return{cols:demoMaster.cols,rows,total:rows.length,upd:demoLatest(want)}; }
   if(action==='save'){ const a=lsGet('gw_demo_rec',[]);const r={...p.rec};if(p.photoData)r.photo='(รูปแนบ—โหมดทดลอง)';a.push(r);lsSet('gw_demo_rec',a);return{photo:r.photo||''} }
+  if(action==='lookup'){ if(!demoMaster)demoMaster=await (await fetch(CONFIG.DEMO_DATA)).json();
+    const q=String(p.q||'').toLowerCase(),c=demoMaster.cols,ix=k=>c.indexOf(k);
+    return{rows:demoMaster.rows.filter(r=>(r[ix('id')]+' '+r[ix('name')]+' '+r[ix('biz')]).toLowerCase().includes(q)).slice(0,40).map(r=>{const o={};c.forEach((k,i)=>o[k]=r[i]);return o})} }
   if(action==='history'){ return{rows:lsGet('gw_demo_rec',[]).filter(r=>r.id===p.id).reverse().slice(0,30)} }
   if(action==='log'){ const a=lsGet('gw_demo_rec',[]);return{cols:REC_COLS,rows:a.map(r=>REC_COLS.map(c=>r[c]??''))} }
 }
@@ -298,7 +308,7 @@ $('#list').onclick=e=>{const c=e.target.closest('.card');if(c)openDetail(c.datas
 let qT;$('#fQ').oninput=e=>{clearTimeout(qT);qT=setTimeout(()=>{S.filt.q=e.target.value;applyFilters()},200)};
 [['fStatus','status'],['fGrp','grp'],['fDist','dist'],['fSf','sf']].forEach(([id,k])=>$('#'+id).onchange=e=>{S.filt[k]=e.target.value;applyFilters()});
 $('#fSort').onchange=async e=>{S.filt.sort=e.target.value;if(S.filt.sort==='near'){try{S.pos=await getPos()}catch(err){toast(err.message,4000);S.filt.sort='name';e.target.value='name'}}applyFilters()};
-document.querySelectorAll('nav.bottom button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.tab;document.querySelectorAll('nav.bottom button').forEach(x=>x.classList.toggle('on',x===b));['List','Dash','Export'].forEach(t=>$('#p'+t).classList.toggle('hide',t!==S.tab));if(S.tab==='Dash')renderDash();window.scrollTo(0,0)});
+document.querySelectorAll('nav.bottom button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.tab;document.querySelectorAll('nav.bottom button').forEach(x=>x.classList.toggle('on',x===b));['List','Find','Dash','Export'].forEach(t=>$('#p'+t).classList.toggle('hide',t!==S.tab));if(S.tab==='Dash')renderDash();window.scrollTo(0,0)});
 
 /* ============ SHEETS ============ */
 function openSheet(html,onClose){const bg=document.createElement('div');bg.className='sheet-bg';bg.innerHTML=`<div class="sheet">${html}</div>`;$('#sheetRoot').appendChild(bg);
@@ -474,6 +484,18 @@ async function exportLog(){
   }catch(e){hideLoading();toast(e.message,5000)}
 }
 const _apply=applyFilters;applyFilters=function(){_apply();const n=$('#xN');if(n)n.textContent=fmt(S.view.length)};
+
+/* ============ ค้นหาพอร์ต ============ */
+let fT,fSeq=0;
+$('#findQ').oninput=e=>{clearTimeout(fT);const q=e.target.value.trim();const out=$('#findRes');
+  if(q.length<3){out.innerHTML='';return}
+  fT=setTimeout(async()=>{const my=++fSeq;out.innerHTML='<div class="mut" style="text-align:center">กำลังค้นหา…</div>';
+    try{const j=await api('lookup',{q});if(my!==fSeq)return;
+      out.innerHTML=j.rows.map(r=>{const mine=S.user.sf!=='ALL'&&r.sf===S.user.sf;
+        return `<div class="card" style="cursor:default"><div class="main"><div class="t">${esc(r.biz||r.name)}</div><div class="s">${esc(r.id)} · ${esc(r.name)} · ${esc(r.seg||r.grp)}</div><div class="s">${esc([r.subd,r.dist].filter(Boolean).join(' / '))||'—'}</div>
+          <div class="tags">${r.pdel?'<span class="tag warn">รอ Delete</span>':''}${r.inact?'<span class="tag warn">Inactive</span>':''}${r.last?`<span class="tag">ซื้อล่าสุด ${esc(r.last)}</span>`:''}</div></div>
+          <div class="side"><span class="tag ${r.sf?(mine?'ok':'blue'):'warn'}" style="font-size:14px;padding:5px 12px">${r.sf?(mine?'พอร์ตของคุณ':'พอร์ต '+sfShort(r.sf)):'ยังไม่มีผู้ดูแล'}</span></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบลูกค้า</div>'
+    }catch(err){out.innerHTML=`<div class="box mut">ค้นหาไม่ได้: ${esc(err.message)}</div>`}},350)};
 
 /* ============ BOOT ============ */
 syncBadge();initLogin();
