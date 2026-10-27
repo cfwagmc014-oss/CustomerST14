@@ -130,7 +130,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
 <script>
 /* ============ CONFIG ============ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbxyOxVY6jxbDx-JUwhLIyZgBikOlgPlY0eAiY6NYh30p0APXHS77fg3HbDjkWKiy-rNvg/exec', // ← วาง Web App URL ของ Apps Script ที่นี่ (เว้นว่าง = โหมดทดลอง)
+  API_URL: 'https://script.google.com/macros/s/AKfycbxyOxVY6jxbDx-JUwhLIyZgBikOlgPlY0eAiY6NYh30p0APXHS77fg3HbDjkWKiy-rNvg/exec',                 // ← วาง Web App URL ของ Apps Script ที่นี่ (เว้นว่าง = โหมดทดลอง)
   DEMO_DATA: 'demo-data.json',
   SF_LIST: ['1401','1402','1403','1404','1405','1406','1407','1408','1409','1410','1411','1412','1413'],
   SHOP_RADIUS_WARN_M: 300,
@@ -233,7 +233,7 @@ async function demoApi(action,p){
 }
 
 /* ============ STATE ============ */
-const S={user:null,pin:'',role:'',all:[],byId:{},view:[],page:1,pos:null,filt:{q:'',status:'all',grp:'',dist:'',sort:'name',sf:''},queue:lsGet('gw_queue',[]),tab:'List'};
+const S={user:null,pin:'',role:'',all:[],byId:{},view:[],page:1,pos:null,filt:{q:'',status:'all',grp:'',dist:'',sort:'sales',sf:''},queue:lsGet('gw_queue',[]),tab:'List'};
 
 /* ============ DATA MERGE ============ */
 function mk(cols,row,u){const c={};cols.forEach((k,i)=>c[k]=row[i]);
@@ -244,6 +244,8 @@ const num=x=>{const n=parseFloat(x);return isNaN(n)?null:n};
 const shopPin=c=>{const a=num(c.u?.shop_lat),b=num(c.u?.shop_lng);return(a&&b)?{lat:a,lng:b}:null};
 const addrLine=c=>[V(c,'house'),V(c,'bldg'),V(c,'alley'),V(c,'road')&&('ถ.'+V(c,'road')),V(c,'subd'),V(c,'dist'),V(c,'prov'),V(c,'post')].filter(Boolean).join(' ');
 const mapUrl=c=>{const p=shopPin(c);return p?`https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`:`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((V(c,'biz')||c.name)+' '+addrLine(c))}`};
+const TH_M=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const lastLabel=c=>{const l=c.last;if(!l)return 'ไม่เคยซื้อ';const m=/^(\d{4})-(\d\d)$/.exec(l);return m?`${TH_M[+m[2]-1]} ${m[1]}`:`ปี ${l}`};
 const title=c=>V(c,'biz')||c.name||c.id;
 const checked=c=>!!(c.u&&c.u.visits>0);
 const due=c=>{const n=c.u?.next_follow;return !!n&&n<=todayStr()};
@@ -304,11 +306,11 @@ $('#hdRefresh').onclick=async()=>{await flushQueue();await loadData();toast('อ
 
 /* ============ FILTERS & LIST ============ */
 const STATUS_OPTS=[['all','ทั้งหมด'],['notyet','ยังไม่เคย Check-in'],['done','Check-in แล้ว'],['due','ถึงกำหนดติดตาม'],['incomplete','ข้อมูลไม่ครบ (ไม่มีเบอร์/พิกัด)'],['nophone','ยังไม่มีเบอร์โทร'],['nopin','ยังไม่ปักพิกัด'],['buy3','ซื้อใน 3 เดือนล่าสุด'],['nobuy3','ไม่ซื้อ 3 เดือนล่าสุด'],['pdel','รอ Delete / Inactive']];
-const SORT_OPTS=[['name','เรียง: ชื่อ ก-ฮ'],['sales','เรียง: ยอดขาย 3 เดือน'],['near','เรียง: ใกล้ฉันที่สุด'],['due','เรียง: นัดติดตามใกล้สุด'],['last','เรียง: Check-in ล่าสุด']];
+const SORT_OPTS=[['sales','เรียง: ยอดซื้อ 3 เดือน สูง→ต่ำ'],['cur','เรียง: ยอดเดือนนี้ สูง→ต่ำ'],['ytd','เรียง: ยอดรวมปี 2026 สูง→ต่ำ'],['name','เรียง: ชื่อ ก-ฮ'],['near','เรียง: ใกล้ฉันที่สุด'],['due','เรียง: นัดติดตามใกล้สุด'],['last','เรียง: Check-in ล่าสุด']];
 function buildFilters(){
   const opts=(arr,all)=>`<option value="">${all}</option>`+[...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th')).map(x=>`<option>${esc(x)}</option>`).join('');
   $('#fStatus').innerHTML=STATUS_OPTS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
-  $('#fSort').innerHTML=SORT_OPTS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+  $('#fSort').innerHTML=SORT_OPTS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');$('#fSort').value=S.filt.sort;
   const keepG=$('#fGrp').value,keepD=$('#fDist').value,keepS=$('#fSf').value;
   $('#fGrp').innerHTML=opts(S.all.map(c=>c.grp),'ทุกกลุ่มลูกค้า');$('#fDist').innerHTML=opts(S.all.map(c=>V(c,'dist')),'ทุกอำเภอ');
   $('#fGrp').value=keepG;$('#fDist').value=keepD;
@@ -325,7 +327,7 @@ function applyFilters(){
       case'buy3':if(!(c.s3m>0))return false;break;case'nobuy3':if(c.s3m>0)return false;break;case'pdel':if(!(c.pdel||c.inact))return false;break}
     if(q){const hay=(c.id+' '+c.name+' '+V(c,'biz')+' '+V(c,'phone')+' '+V(c,'contact')+' '+addrLine(c)).toLowerCase();if(!hay.includes(q))return false}
     return true});
-  const cmp={name:(a,b)=>title(a).localeCompare(title(b),'th'),sales:(a,b)=>b.s3m-a.s3m,
+  const cmp={name:(a,b)=>title(a).localeCompare(title(b),'th'),sales:(a,b)=>b.s3m-a.s3m||b.ytd-a.ytd,cur:(a,b)=>b.s7-a.s7||b.s3m-a.s3m,ytd:(a,b)=>b.ytd-a.ytd,
     due:(a,b)=>(a.u?.next_follow||'9')>(b.u?.next_follow||'9')?1:-1,last:(a,b)=>(b.u?.lastVisit||'').localeCompare(a.u?.lastVisit||'')};
   if(f.sort==='near'&&S.pos){v.forEach(c=>{const p=shopPin(c);c._d=p?hav(S.pos.lat,S.pos.lng,p.lat,p.lng):1e12});v.sort((a,b)=>a._d-b._d)}
   else v.sort(cmp[f.sort==='near'?'name':f.sort]);
@@ -345,7 +347,7 @@ function renderList(){
     if(!V(c,'phone'))tg.push('<span class="tag warn">ไม่มีเบอร์</span>');
     if(shopPin(c))tg.push('<span class="tag ok">📍</span>');
     if(S.filt.sort==='near'&&c._d<1e11)tg.push(`<span class="tag blue">${fmtDist(c._d)}</span>`);
-    return `<div class="card" data-id="${esc(c.id)}"><div class="main"><div class="t">${esc(title(c))}</div><div class="s">${esc(c.id)} · ${esc(c.seg||c.grp)}${S.user.sf==='ALL'&&c.sf?' · '+sfShort(c.sf):''}</div><div class="s">${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))||'—'}</div><div class="tags">${tg.join('')}</div></div><div class="side"><b>${fmt(c.s3m)}</b>บ./3 ด.</div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบรายการ</div>';
+    return `<div class="card" data-id="${esc(c.id)}"><div class="main"><div class="t">${esc(title(c))}</div><div class="s">${esc(c.id)} · ${esc(c.seg||c.grp)}${S.user.sf==='ALL'&&c.sf?' · '+sfShort(c.sf):''}</div><div class="s">${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))||'—'}</div><div class="tags">${tg.join('')}</div></div><div class="side"><b>${fmt(c.s7)}</b>เดือนนี้ (1-18 ต.ค.)<div style="margin-top:3px">3 ด.: ${fmt(c.s3m)}</div><div>ซื้อล่าสุด: <span style="color:${c.last>='2026-08'?'var(--ok)':'var(--red)'};font-weight:600">${lastLabel(c)}</span></div></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบรายการ</div>';
   $('#moreBtn').classList.toggle('hide',n>=S.view.length);
 }
 $('#moreBtn').onclick=()=>{S.page++;renderList()};
@@ -373,7 +375,7 @@ function openDetail(id){
       <div class="box"><h3>ข้อมูลลูกค้า</h3><div class="kv">
         ${kv('ผู้ติดต่อ',V(c,'contact'))}${kv('เบอร์โทร',ph)}${kv('LINE',V(c,'line'))}${kv('ที่อยู่',addrLine(c))}
         ${kv('พิกัดร้าน',shopPin(c)?`${(+u.shop_lat).toFixed(5)}, ${(+u.shop_lng).toFixed(5)}`:'ยังไม่ปักพิกัด')}
-        ${kv('SF ดูแล',sfShort(c.sf))}${kv('วันสมัคร',c.reg)}${kv('ซื้อล่าสุด',c.last)}${c.pdel?kv('สถานะ','รอ Delete ออกจากระบบ'):''}${c.inact?kv('สถานะ',c.inact&&'Inactive Sep 26'):''}</div></div>
+        ${kv('SF ดูแล',sfShort(c.sf))}${kv('วันสมัคร',c.reg)}${kv('ซื้อล่าสุด',lastLabel(c))}${kv('ยอดเดือนนี้ (1-18 ต.ค.)',fmt(c.s7)+' บ.')}${kv('ยอด 3 เดือนล่าสุด',fmt(c.s3m)+' บ.')}${c.pdel?kv('สถานะ','รอ Delete ออกจากระบบ'):''}${c.inact?kv('สถานะ',c.inact&&'Inactive Sep 26'):''}</div></div>
       <div class="box"><h3>ยอดขายรายเดือน (บาท) — ต.ค. = 1-18 ต.ค.</h3><div class="bars">${[c.s1,c.s2,c.s3,c.s4,c.s5,c.s6,c.s7].map((v,i)=>`<div><i style="height:${Math.round(v/mx*52)}px"></i>${fmt(v)}<br>${MONTHS[i]}</div>`).join('')}</div></div>
       <div class="box"><h3>ประวัติ Check-in / แก้ไขล่าสุด</h3><div id="hist" class="mut">กำลังโหลด…</div></div>
     </div>
