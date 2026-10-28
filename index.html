@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#C0272D">
-<title>GW Follow-Up ST.14</title>
+<title>ST14 - Customer Checklist</title>
+<link rel="icon" href="logo.png">
+<link rel="apple-touch-icon" href="logo.png">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--red:#C0272D;--blue:#0168B5;--bg:#f3f4f7;--card:#fff;--ink:#1d2433;--mut:#6b7385;--line:#e3e6ee;--ok:#1e8e4e;--warn:#d98200;--r:14px}
@@ -13,7 +15,7 @@ body{margin:0;font-family:'Sarabun','Noto Sans Thai',system-ui,sans-serif;backgr
 button,input,select,textarea{font:inherit;color:inherit}
 .hide{display:none!important}
 header.top{position:sticky;top:0;z-index:20;background:var(--red);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px}
-header.top h1{font-size:17px;margin:0;flex:1}
+header.top h1{font-size:16px;line-height:1.15;margin:0;flex:1}
 header.top .chip{background:rgba(255,255,255,.18);border-radius:99px;padding:4px 10px;font-size:13px;border:0;color:#fff}
 .badge-sync{background:#ffd34d;color:#4a3500;font-weight:700}
 .wrap{max-width:760px;margin:0 auto;padding:10px 12px 90px}
@@ -81,7 +83,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
 
 <!-- LOGIN -->
 <div id="vLogin" class="login hide">
-  <div class="logo"><h1>GW Follow-Up</h1><p>Go Wholesale Rayong ST.14 · ติดตามลูกค้า B2B</p></div>
+  <div class="logo"><img src="logo.png" alt="" onerror="this.remove()" style="height:84px;width:84px;border-radius:18px;margin-bottom:10px;box-shadow:0 0 0 3px rgba(255,255,255,.6)"><h1>ST14 - Customer Checklist</h1><p>Go Wholesale Rayong ST.14 · ติดตามลูกค้า B2B</p></div>
   <div class="box">
     <div class="field"><label>ผู้ใช้งาน</label><select id="lgSf"></select></div>
     <div class="field"><label>รหัสผ่าน</label><input id="lgPin" type="password" inputmode="text" autocomplete="off"></div>
@@ -92,7 +94,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
 
 <!-- MAIN -->
 <div id="vMain" class="hide">
-  <header class="top"><h1 id="hdTitle">GW Follow-Up</h1><button class="chip badge-sync hide" id="syncBadge"></button><button class="chip" id="hdRefresh">⟳</button><button class="chip" id="hdUser"></button></header>
+  <header class="top"><img src="logo.png" alt="" onerror="this.remove()" style="height:34px;width:34px;border-radius:8px;box-shadow:0 0 0 2px rgba(255,255,255,.7)"><h1 id="hdTitle">ST14 - Customer Checklist</h1><button class="chip badge-sync hide" id="syncBadge"></button><button class="chip" id="hdRefresh">⟳</button><button class="chip" id="hdUser"></button></header>
 
   <div id="pList" class="wrap">
     <div class="filters">
@@ -292,7 +294,7 @@ async function login(sf,silent){
     S.user={sf:sf==='ADMIN'?'ALL':sf,name:sf==='ADMIN'?'Admin':sfShort(sf)};
     if(S.role==='admin'&&sf!=='ADMIN')S.role='team'; // เลือกเป็น SF = เห็นเฉพาะพอร์ตนั้น
     lsSet('gw_user',{sf,pin:S.pin});
-    show('vMain'); $('#hdUser').textContent=S.user.name+' ⎋'; $('#hdTitle').textContent=DEMO?'GW Follow-Up (ทดลอง)':'GW Follow-Up ST.14';
+    show('vMain'); $('#hdUser').textContent=S.user.name+' ⎋'; $('#hdTitle').textContent=DEMO?'ST14 - Customer Checklist (ทดลอง)':'ST14 - Customer Checklist';
     await loadData(); flushQueue();
   }catch(e){
     if(silent&&String(e.message).match(/fetch|network|Failed/i)){ // ออฟไลน์ + เคยล็อกอิน
