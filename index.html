@@ -142,7 +142,7 @@ const CONFIG = {
 };
 const DEMO = !CONFIG.API_URL;
 const VISIT_RESULTS = ['พบเจ้าของ/ผู้ตัดสินใจ','พบพนักงาน/ผู้ช่วย','ร้านปิด (ไม่พบคน)','ไม่พบร้านตามที่อยู่','โทร/LINE ไม่ติด'];
-const CUST_STATUS = ['เปิดกิจการ - ซื้อประจำ','เปิดกิจการ - ซื้อบ้างครั้งคราว','เปิดกิจการ - ยังไม่ซื้อ/หยุดซื้อ','ปิดชั่วคราว','เลิกกิจการ','ย้ายที่ตั้ง','ติดต่อไม่ได้'];
+const CUST_STATUS = ['เปิดกิจการ - ซื้อประจำ','เปิดกิจการ - ซื้อบ้างครั้งคราว','เปิดกิจการ - ซื้อกินใช้เท่านั้น','เปิดกิจการ - ยังไม่ซื้อ/หยุดซื้อ','ปิดชั่วคราว','เลิกกิจการ','ย้ายที่ตั้ง','ติดต่อไม่ได้'];
 const NOT_BUY = ['ราคาสูงกว่าที่อื่น','ใช้ซัพพลายเออร์ประจำ','สินค้าไม่ครบ','ไม่สะดวกเดินทาง/ไม่มีรถ','ต้องการเครดิต','ปริมาณซื้อน้อย','ยังไม่รู้จัก/ไม่เคยใช้บริการ','อื่นๆ'];
 const CHANNELS = [['CHECKIN','ลงพื้นที่ (Check-in GPS)'],['CALL','โทรศัพท์'],['LINE','LINE']];
 const MONTHS = ['เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.*'];
@@ -425,7 +425,7 @@ function openForm(c,mode){
     <div class="ft"><button class="btn grey" id="fCancel" style="flex:1">ยกเลิก</button><button class="btn red" id="fSave" style="flex:2">${isCi?'บันทึก Check-in':'บันทึกข้อมูล'}</button></div>`);
   const $$=s=>$(s,bg);
   const pinTxt=()=>{const p=newPin||pin;$$('#pinTxt').textContent=(p&&p.lat!=='')?`${(+p.lat).toFixed(6)}, ${(+p.lng).toFixed(6)}${newPin?(newPin.manual?' (ปรับเอง)':(newPin.acc?` (GPS ±${Math.round(newPin.acc)} ม.)`:' (ใหม่)')):''}`:'ยังไม่ปักหมุด'};pinTxt();
-  const nb=()=>{const s=$$('#f_cust_status').value;$$('#nbWrap').classList.toggle('hide',!/ยังไม่ซื้อ|ซื้อบ้าง|ปิด|เลิก|ย้าย/.test(s))};nb();$$('#f_cust_status').onchange=nb;
+  const nb=()=>{const s=$$('#f_cust_status').value;$$('#nbWrap').classList.toggle('hide',!/ยังไม่ซื้อ|ซื้อบ้าง|ซื้อกินใช้|ปิด|เลิก|ย้าย/.test(s))};nb();$$('#f_cust_status').onchange=nb;
   let stopPin=null;
   $$('#pinHere').onclick=()=>{stopPin&&stopPin();const t=$$('#pinTxt'),b=$$('#pinHere');b.disabled=true;
     stopPin=watchBest(p=>{t.textContent=`⏳ GPS ±${Math.round(p.acc)} ม. กำลังปรับให้แม่นขึ้น…`},
