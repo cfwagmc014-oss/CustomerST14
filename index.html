@@ -349,7 +349,7 @@ function renderList(){
     if(!V(c,'phone'))tg.push('<span class="tag warn">ไม่มีเบอร์</span>');
     if(shopPin(c))tg.push('<span class="tag ok">📍</span>');
     if(S.filt.sort==='near'&&c._d<1e11)tg.push(`<span class="tag blue">${fmtDist(c._d)}</span>`);
-    return `<div class="card" data-id="${esc(c.id)}"><div class="main"><div class="t">${esc(title(c))}</div><div class="s">${esc(c.id)} · ${esc(c.seg||c.grp)}${S.user.sf==='ALL'&&c.sf?' · '+sfShort(c.sf):''}</div><div class="s">${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))||'—'}</div><div class="tags">${tg.join('')}</div></div><div class="side"><b>${fmt(c.s7)}</b>เดือนนี้ (1-18 ต.ค.)<div style="margin-top:3px">3 ด.: ${fmt(c.s3m)}</div><div>ซื้อล่าสุด: <span style="color:${c.last>='2026-08'?'var(--ok)':'var(--red)'};font-weight:600">${lastLabel(c)}</span></div></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบรายการ</div>';
+    return `<div class="card" data-id="${esc(c.id)}"><div class="main"><div class="t">${esc(title(c))}</div><div class="s">${esc(c.id)} · ${esc(c.seg||c.grp)}${S.user.sf==='ALL'&&c.sf?' · '+sfShort(c.sf):''}</div><div class="s">${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))||'—'}</div><div class="tags">${tg.join('')}</div></div><div class="side"><b>${fmt(c.s7)}</b>เดือนนี้ (1-25 ต.ค.)<div style="margin-top:3px">3 ด.: ${fmt(c.s3m)}</div><div>ซื้อล่าสุด: <span style="color:${c.last>='2026-08'?'var(--ok)':'var(--red)'};font-weight:600">${lastLabel(c)}</span></div></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบรายการ</div>';
   $('#moreBtn').classList.toggle('hide',n>=S.view.length);
 }
 $('#moreBtn').onclick=()=>{S.page++;renderList()};
@@ -377,8 +377,8 @@ function openDetail(id){
       <div class="box"><h3>ข้อมูลลูกค้า</h3><div class="kv">
         ${kv('ผู้ติดต่อ',V(c,'contact'))}${kv('เบอร์โทร',ph)}${kv('LINE',V(c,'line'))}${kv('ที่อยู่',addrLine(c))}
         ${kv('พิกัดร้าน',shopPin(c)?`${(+u.shop_lat).toFixed(5)}, ${(+u.shop_lng).toFixed(5)}`:'ยังไม่ปักพิกัด')}
-        ${kv('SF ดูแล',sfShort(c.sf))}${kv('วันสมัคร',c.reg)}${kv('ซื้อล่าสุด',lastLabel(c))}${kv('ยอดเดือนนี้ (1-18 ต.ค.)',fmt(c.s7)+' บ.')}${kv('ยอด 3 เดือนล่าสุด',fmt(c.s3m)+' บ.')}${c.pdel?kv('สถานะ','รอ Delete ออกจากระบบ'):''}${c.inact?kv('สถานะ',c.inact&&'Inactive Sep 26'):''}</div></div>
-      <div class="box"><h3>ยอดขายรายเดือน (บาท) — ต.ค. = 1-18 ต.ค.</h3><div class="bars">${[c.s1,c.s2,c.s3,c.s4,c.s5,c.s6,c.s7].map((v,i)=>`<div><i style="height:${Math.round(v/mx*52)}px"></i>${fmt(v)}<br>${MONTHS[i]}</div>`).join('')}</div></div>
+        ${kv('SF ดูแล',sfShort(c.sf))}${kv('วันสมัคร',c.reg)}${kv('ซื้อล่าสุด',lastLabel(c))}${kv('ยอดเดือนนี้ (1-25 ต.ค.)',fmt(c.s7)+' บ.')}${kv('ยอด 3 เดือนล่าสุด',fmt(c.s3m)+' บ.')}${c.pdel?kv('สถานะ','รอ Delete ออกจากระบบ'):''}${c.inact?kv('สถานะ',c.inact&&'Inactive Sep 26'):''}</div></div>
+      <div class="box"><h3>ยอดขายรายเดือน (บาท) — ต.ค. = 1-25 ต.ค.</h3><div class="bars">${[c.s1,c.s2,c.s3,c.s4,c.s5,c.s6,c.s7].map((v,i)=>`<div><i style="height:${Math.round(v/mx*52)}px"></i>${fmt(v)}<br>${MONTHS[i]}</div>`).join('')}</div></div>
       <div class="box"><h3>ประวัติ Check-in / แก้ไขล่าสุด</h3><div id="hist" class="mut">กำลังโหลด…</div></div>
     </div>
     <div class="ft">
@@ -511,7 +511,7 @@ function renderDash(){
 /* ============ EXPORT ============ */
 const XLSX_URL='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 function loadXlsx(){return new Promise((res,rej)=>{if(window.XLSX)return res();const s=document.createElement('script');s.src=XLSX_URL;s.onload=res;s.onerror=()=>rej(new Error('โหลดตัวสร้าง Excel ไม่ได้ (ต้องต่ออินเทอร์เน็ต) — ใช้ CSV แทนได้'));document.head.appendChild(s)})}
-const EXP_HEAD=['รหัสสมาชิก','ชื่อ','ชื่อร้าน/ธุรกิจ (ล่าสุด)','กลุ่มลูกค้า','ประเภท','SF','ผู้ติดต่อ','เบอร์โทร','LINE','เลขที่','ถนน','ตำบล','อำเภอ','จังหวัด','รหัสไปรษณีย์','Latitude','Longitude','Google Maps','สถานะลูกค้า','เหตุผลไม่ซื้อ','คู่แข่ง/แหล่งซื้อ','ความสนใจ','จำนวนครั้ง Check-in','Check-in ล่าสุด','ผลล่าสุด','นัดติดตาม','หมายเหตุล่าสุด','รูป','ยอด เม.ย.','ยอด พ.ค.','ยอด มิ.ย.','ยอด ก.ค.','ยอด ส.ค.','ยอด ก.ย.','ยอด ต.ค.(1-18)','ยอดรวม 2026','ซื้อล่าสุด','รอ Delete','Inactive Sep26','แก้ไขข้อมูลแล้ว'];
+const EXP_HEAD=['รหัสสมาชิก','ชื่อ','ชื่อร้าน/ธุรกิจ (ล่าสุด)','กลุ่มลูกค้า','ประเภท','SF','ผู้ติดต่อ','เบอร์โทร','LINE','เลขที่','ถนน','ตำบล','อำเภอ','จังหวัด','รหัสไปรษณีย์','Latitude','Longitude','Google Maps','สถานะลูกค้า','เหตุผลไม่ซื้อ','คู่แข่ง/แหล่งซื้อ','ความสนใจ','จำนวนครั้ง Check-in','Check-in ล่าสุด','ผลล่าสุด','นัดติดตาม','หมายเหตุล่าสุด','รูป','ยอด เม.ย.','ยอด พ.ค.','ยอด มิ.ย.','ยอด ก.ค.','ยอด ส.ค.','ยอด ก.ย.','ยอด ต.ค.(1-25)','ยอดรวม 2026','ซื้อล่าสุด','รอ Delete','Inactive Sep26','แก้ไขข้อมูลแล้ว'];
 const expRow=c=>{const u=c.u||{},p=shopPin(c);return [c.id,c.name,V(c,'biz'),c.grp,c.seg,sfShort(c.sf),V(c,'contact'),V(c,'phone'),V(c,'line'),V(c,'house'),V(c,'road'),V(c,'subd'),V(c,'dist'),V(c,'prov'),V(c,'post'),p?p.lat:'',p?p.lng:'',p?`https://www.google.com/maps?q=${p.lat},${p.lng}`:'',u.cust_status||'',u.not_buy_reason||'',u.competitor||'',u.interest||'',u.visits||0,u.lastVisit||'',u.lastRes||'',u.next_follow||'',u.note||'',u.photo||'',c.s1,c.s2,c.s3,c.s4,c.s5,c.s6,c.s7,c.ytd,c.last,c.pdel?'Y':'',c.inact?'Y':'',c.u?'Y':'']};
 function renderExport(){
   $('#pExport').innerHTML=`<div class="box"><h3>Export ข้อมูลติดตามลูกค้า</h3><p class="mut" style="margin-top:0">ไฟล์รวมข้อมูลต้นฉบับ + ข้อมูลที่ทีมแก้ไข/Check-in ล่าสุด · ใช้ตัวกรองในหน้ารายชื่อเพื่อเลือกกลุ่มก่อน Export ได้</p>
