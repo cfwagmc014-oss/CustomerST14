@@ -134,7 +134,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
 <script>
 /* ============ CONFIG ============ */
 const CONFIG = {
-  API_URL: '',                 // ← วาง Web App URL ของ Apps Script ที่นี่ (เว้นว่าง = โหมดทดลอง)
+  API_URL: 'https://script.google.com/macros/s/AKfycbxyOxVY6jxbDx-JUwhLIyZgBikOlgPlY0eAiY6NYh30p0APXHS77fg3HbDjkWKiy-rNvg/exec',                 // ← วาง Web App URL ของ Apps Script ที่นี่ (เว้นว่าง = โหมดทดลอง)
   DEMO_DATA: 'demo-data.json',
   SF_LIST: ['1401','1402','1403','1404','1405','1406','1407','1408','1409','1410','1411','1412','1413'],
   SHOP_RADIUS_WARN_M: 300,
@@ -243,7 +243,8 @@ const S={user:null,pin:'',role:'',all:[],byId:{},view:[],page:1,pos:null,filt:{q
 function mk(cols,row,u){const c={};cols.forEach((k,i)=>c[k]=row[i]);
   ['s1','s2','s3','s4','s5','s6','s7','ytd'].forEach(k=>c[k]=Number(c[k]||0));
   c.u=u||null;c.s3m=c.s5+c.s6+c.s7;return c}
-const V=(c,k)=>{const u=c.u;return (u&&u[k]!==undefined&&u[k]!=='')?u[k]:(c[k]??'')};
+const fixPhone=v=>{v=String(v||'').trim();if(!v)return '';const d=v.replace(/[\s\-]/g,'');return /^[1-9]\d{8}$/.test(d)?'0'+d:v};
+const V=(c,k)=>{const u=c.u;const v=(u&&u[k]!==undefined&&u[k]!=='')?u[k]:(c[k]??'');return k==='phone'?fixPhone(v):v};
 const num=x=>{const n=parseFloat(x);return isNaN(n)?null:n};
 const shopPin=c=>{const a=num(c.u?.shop_lat),b=num(c.u?.shop_lng);return(a&&b)?{lat:a,lng:b}:null};
 const addrLine=c=>[V(c,'house'),V(c,'bldg'),V(c,'alley'),V(c,'road')&&('ถ.'+V(c,'road')),V(c,'subd'),V(c,'dist'),V(c,'prov'),V(c,'post')].filter(Boolean).join(' ');
@@ -469,7 +470,7 @@ function openForm(c,mode){
     const rec={ts:nowIso(),type:ch,id:c.id,user:S.user.sf==='ALL'?'Admin':S.user.sf,channel:ch,device:dev,visit_result:isCi?v('visit_result'):'',
       cust_status:v('cust_status'),not_buy_reason:$$('#nbWrap').classList.contains('hide')?'':v('not_buy_reason'),competitor:v('competitor'),
       interest:[...bg.querySelectorAll('.int:checked')].map(x=>x.value).join(','),
-      contact:v('contact'),phone:v('phone'),line:v('line'),biz:v('biz'),house:v('house'),road:v('road'),subd:v('subd'),dist:v('dist'),prov:v('prov'),post:v('post'),
+      contact:v('contact'),phone:fixPhone(v('phone')),line:v('line'),biz:v('biz'),house:v('house'),road:v('road'),subd:v('subd'),dist:v('dist'),prov:v('prov'),post:v('post'),
       note:v('note'),next_follow:v('next_follow'),photo:u.photo||''};
     const p=newPin||pin; rec.shop_lat=(p&&p.lat!=='')?p.lat:'';rec.shop_lng=(p&&p.lat!=='')?p.lng:'';
     if(isCi&&ch==='CHECKIN'&&gps){rec.ci_lat=gps.lat;rec.ci_lng=gps.lng;rec.ci_acc=Math.round(gps.acc);rec.ci_dist=gps.d!=null?Math.round(gps.d):''}
