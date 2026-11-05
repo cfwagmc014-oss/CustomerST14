@@ -32,6 +32,8 @@ textarea{min-height:70px;resize:vertical}
 .card .s{font-size:13px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .card .side{text-align:right;font-size:12px;color:var(--mut);white-space:nowrap}
 .card .side b{display:block;font-size:15px;color:var(--ink)}
+.card.out{border:2px solid var(--red);background:#fff1f1}
+.card.vac{border:2px solid #e0a800;background:#fff9db}
 .tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .tag{font-size:11.5px;padding:2px 8px;border-radius:99px;background:#eef0f6;color:#46506a}
 .tag.ok{background:#e1f4e9;color:var(--ok)}.tag.warn{background:#fff1d6;color:#8a5600}.tag.bad{background:#fde3e4;color:var(--red)}.tag.blue{background:#e1effa;color:var(--blue)}
@@ -132,7 +134,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
 <script>
 /* ============ CONFIG ============ */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbxyOxVY6jxbDx-JUwhLIyZgBikOlgPlY0eAiY6NYh30p0APXHS77fg3HbDjkWKiy-rNvg/exec',                 // ← วาง Web App URL ของ Apps Script ที่นี่ (เว้นว่าง = โหมดทดลอง)
+  API_URL: '',                 // ← วาง Web App URL ของ Apps Script ที่นี่ (เว้นว่าง = โหมดทดลอง)
   DEMO_DATA: 'demo-data.json',
   SF_LIST: ['1401','1402','1403','1404','1405','1406','1407','1408','1409','1410','1411','1412','1413'],
   SHOP_RADIUS_WARN_M: 300,
@@ -307,7 +309,7 @@ $('#hdUser').onclick=()=>{if(confirm('ออกจากระบบ?')){try{loc
 $('#hdRefresh').onclick=async()=>{await flushQueue();await loadData();toast('อัปเดตข้อมูลแล้ว')};
 
 /* ============ FILTERS & LIST ============ */
-const STATUS_OPTS=[['all','ทั้งหมด'],['notyet','ยังไม่เคย Check-in'],['done','Check-in แล้ว'],['due','ถึงกำหนดติดตาม'],['incomplete','ข้อมูลไม่ครบ (ไม่มีเบอร์/พิกัด)'],['nophone','ยังไม่มีเบอร์โทร'],['nopin','ยังไม่ปักพิกัด'],['buy3','ซื้อใน 3 เดือนล่าสุด'],['nobuy3','ไม่ซื้อ 3 เดือนล่าสุด'],['pdel','รอ Delete / Inactive']];
+const STATUS_OPTS=[['all','ทั้งหมด'],['notyet','ยังไม่เคย Check-in'],['done','Check-in แล้ว'],['due','ถึงกำหนดติดตาม'],['incomplete','ข้อมูลไม่ครบ (ไม่มีเบอร์/พิกัด)'],['nophone','ยังไม่มีเบอร์โทร'],['nopin','ยังไม่ปักพิกัด'],['buy3','ซื้อใน 3 เดือนล่าสุด'],['nobuy3','ไม่ซื้อ 3 เดือนล่าสุด'],['pdel','รอ Delete / Inactive'],['out','🔴 ไม่อยู่ในพอร์ตใหม่ (กล่องแดง)'],['newp','เติมใหม่ / ย้ายเข้าพอร์ต'],['vac','🟡 ยังไม่มี SF ดูแล (กล่องเหลือง)']];
 const SORT_OPTS=[['sales','เรียง: ยอดซื้อ 3 เดือน สูง→ต่ำ'],['cur','เรียง: ยอดเดือนนี้ สูง→ต่ำ'],['ytd','เรียง: ยอดรวมปี 2026 สูง→ต่ำ'],['name','เรียง: ชื่อ ก-ฮ'],['near','เรียง: ใกล้ฉันที่สุด'],['due','เรียง: นัดติดตามใกล้สุด'],['last','เรียง: Check-in ล่าสุด']];
 function buildFilters(){
   const opts=(arr,all)=>`<option value="">${all}</option>`+[...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th')).map(x=>`<option>${esc(x)}</option>`).join('');
@@ -326,7 +328,7 @@ function applyFilters(){
     if(f.sf){if(f.sf==='__none'){if(c.sf)return false}else if(c.sf!==f.sf)return false}
     switch(f.status){case'notyet':if(checked(c))return false;break;case'done':if(!checked(c))return false;break;case'due':if(!due(c))return false;break;
       case'incomplete':if(!incomplete(c))return false;break;case'nophone':if(V(c,'phone'))return false;break;case'nopin':if(shopPin(c))return false;break;
-      case'buy3':if(!(c.s3m>0))return false;break;case'nobuy3':if(c.s3m>0)return false;break;case'pdel':if(!(c.pdel||c.inact))return false;break}
+      case'buy3':if(!(c.s3m>0))return false;break;case'nobuy3':if(c.s3m>0)return false;break;case'pdel':if(!(c.pdel||c.inact))return false;break;case'out':if(c.port!=='OUT')return false;break;case'vac':if(c.port!=='VACANT')return false;break;case'newp':if(c.port!=='NEW'&&c.port!=='MOVED')return false;break}
     if(q){const hay=(c.id+' '+c.name+' '+V(c,'biz')+' '+V(c,'phone')+' '+V(c,'contact')+' '+addrLine(c)).toLowerCase();if(!hay.includes(q))return false}
     return true});
   const cmp={name:(a,b)=>title(a).localeCompare(title(b),'th'),sales:(a,b)=>b.s3m-a.s3m||b.ytd-a.ytd,cur:(a,b)=>b.s7-a.s7||b.s3m-a.s3m,ytd:(a,b)=>b.ytd-a.ytd,
@@ -346,10 +348,14 @@ function renderList(){
     if(due(c))tg.push(`<span class="tag bad">นัดติดตาม ${fmtD(c.u.next_follow)}</span>`);else if(c.u?.next_follow)tg.push(`<span class="tag blue">นัด ${fmtD(c.u.next_follow)}</span>`);
     if(c.u?.cust_status)tg.push(`<span class="tag blue">${esc(c.u.cust_status.replace('เปิดกิจการ - ',''))}</span>`);
     if(c.pdel||c.inact)tg.push('<span class="tag warn">รอ Delete/Inactive</span>');
+    if(c.port==='OUT')tg.unshift('<span class="tag bad">🔴 ไม่อยู่ในพอร์ตใหม่ (รอตัดออก)</span>');
+    if(c.port==='VACANT')tg.unshift('<span class="tag warn">🟡 ยังไม่มี SF ดูแล</span>');
+    if(c.port==='NEW')tg.push('<span class="tag blue">เติมใหม่</span>');
+    if(c.port==='MOVED')tg.push('<span class="tag blue">ย้ายมาจาก SF1405</span>');
     if(!V(c,'phone'))tg.push('<span class="tag warn">ไม่มีเบอร์</span>');
     if(shopPin(c))tg.push('<span class="tag ok">📍</span>');
     if(S.filt.sort==='near'&&c._d<1e11)tg.push(`<span class="tag blue">${fmtDist(c._d)}</span>`);
-    return `<div class="card" data-id="${esc(c.id)}"><div class="main"><div class="t">${esc(title(c))}</div><div class="s">${esc(c.id)} · ${esc(c.seg||c.grp)}${S.user.sf==='ALL'&&c.sf?' · '+sfShort(c.sf):''}</div><div class="s">${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))||'—'}</div><div class="tags">${tg.join('')}</div></div><div class="side"><b>${fmt(c.s7)}</b>เดือนนี้ (1-25 ต.ค.)<div style="margin-top:3px">3 ด.: ${fmt(c.s3m)}</div><div>ซื้อล่าสุด: <span style="color:${c.last>='2026-08'?'var(--ok)':'var(--red)'};font-weight:600">${lastLabel(c)}</span></div></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบรายการ</div>';
+    return `<div class="card${c.port==='OUT'?' out':c.port==='VACANT'?' vac':''}" data-id="${esc(c.id)}"><div class="main"><div class="t">${esc(title(c))}</div><div class="s">${esc(c.id)} · ${esc(c.seg||c.grp)}${S.user.sf==='ALL'&&c.sf?' · '+sfShort(c.sf):''}</div><div class="s">${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))||'—'}</div><div class="tags">${tg.join('')}</div></div><div class="side"><b>${fmt(c.s7)}</b>เดือนนี้ (1-25 ต.ค.)<div style="margin-top:3px">3 ด.: ${fmt(c.s3m)}</div><div>ซื้อล่าสุด: <span style="color:${c.last>='2026-08'?'var(--ok)':'var(--red)'};font-weight:600">${lastLabel(c)}</span></div></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบรายการ</div>';
   $('#moreBtn').classList.toggle('hide',n>=S.view.length);
 }
 $('#moreBtn').onclick=()=>{S.page++;renderList()};
@@ -370,6 +376,8 @@ function openDetail(id){
   const {bg,close}=openSheet(`
     <div class="hd"><div class="tt"><b>${esc(title(c))}</b><div>${esc(c.id)} · ${esc(c.name)} · ${esc(c.seg||c.grp)}</div></div><button class="x">✕</button></div>
     <div class="bd">
+      ${c.port==='VACANT'?'<div class="box" style="background:#fff3bf;color:#7a5600;font-weight:600">🟡 ลูกค้ารายนี้ยังไม่มี SF ดูแล</div>':''}
+      ${c.port==='OUT'?'<div class="box" style="background:#fde3e4;color:var(--red);font-weight:600">🔴 ลูกค้ารายนี้ไม่อยู่ในพอร์ตใหม่ (รอตัดออก) — ยังติดตามได้ตามปกติจนกว่าจะประกาศตัดออก</div>':''}
       <div class="box"><h3>สถานะติดตาม</h3><div class="kv">
         ${kv('Check-in',checked(c)?`${u.visits} ครั้ง · ล่าสุด ${fmtTs(u.lastVisit)}`:'ยังไม่เคย')}
         ${kv('ผลล่าสุด',u.lastRes)}${kv('สถานะลูกค้า',u.cust_status)}${kv('เหตุผลไม่ซื้อ',u.not_buy_reason)}${kv('คู่แข่ง/แหล่งซื้อ',u.competitor)}${kv('สนใจ',u.interest)}
@@ -498,8 +506,8 @@ function renderDash(){
   const cnt=(arr)=>{const m={};arr.filter(Boolean).forEach(x=>m[x]=(m[x]||0)+1);return Object.entries(m).sort((a,b)=>b[1]-a[1])};
   const bars=(arr)=>{const mx=Math.max(1,...arr.map(a=>a[1]));return arr.map(([l,n])=>`<div class="hbar"><span class="l">${esc(l)}</span><span class="p"><i style="width:${n/mx*100}%"></i></span><span class="n">${fmt(n)}</span></div>`).join('')||'<span class="mut">ยังไม่มีข้อมูล</span>'};
   let sfTbl='';
-  if(S.user.sf==='ALL'){const m={};A.forEach(c=>{const k=c.sf||'—';const o=m[k]||(m[k]={t:0,c:0,d:0,td:0,p:0,pn:0});o.t++;if(checked(c))o.c++;if(due(c))o.d++;if(c.u?.lastVisit?.startsWith(td))o.td++;if(V(c,'phone'))o.p++;if(shopPin(c))o.pn++});
-    sfTbl=`<div class="box"><h3>แยกตามพอร์ต</h3><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>ลูกค้า</th><th>Check-in</th><th>%</th><th>วันนี้</th><th>ถึงนัด</th><th>มีเบอร์</th><th>มีพิกัด</th></tr>${Object.entries(m).sort().map(([k,o])=>`<tr><td>${k==='—'?'ไม่มี SF':sfShort(k)}</td><td>${fmt(o.t)}</td><td>${fmt(o.c)}</td><td>${Math.round(o.c*100/o.t)}%</td><td>${o.td}</td><td>${o.d}</td><td>${Math.round(o.p*100/o.t)}%</td><td>${Math.round(o.pn*100/o.t)}%</td></tr>`).join('')}</table></div></div>`}
+  if(S.user.sf==='ALL'){const m={};A.forEach(c=>{const k=c.sf||'—';const o=m[k]||(m[k]={t:0,c:0,d:0,td:0,p:0,pn:0,out:0});if(c.port==='OUT')o.out++;o.t++;if(checked(c))o.c++;if(due(c))o.d++;if(c.u?.lastVisit?.startsWith(td))o.td++;if(V(c,'phone'))o.p++;if(shopPin(c))o.pn++});
+    sfTbl=`<div class="box"><h3>แยกตามพอร์ต</h3><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>ลูกค้า</th><th>Check-in</th><th>%</th><th>วันนี้</th><th>ถึงนัด</th><th>มีเบอร์</th><th>มีพิกัด</th><th>🔴 รอตัดออก</th></tr>${Object.entries(m).sort().map(([k,o])=>`<tr><td>${k==='—'?'ไม่มี SF':sfShort(k)}</td><td>${fmt(o.t)}</td><td>${fmt(o.c)}</td><td>${Math.round(o.c*100/o.t)}%</td><td>${o.td}</td><td>${o.d}</td><td>${Math.round(o.p*100/o.t)}%</td><td>${Math.round(o.pn*100/o.t)}%</td><td>${o.out||'-'}</td></tr>`).join('')}</table></div></div>`}
   el.innerHTML=`<div class="kpis"><div class="kpi"><b>${fmt(tot)}</b><span>ลูกค้าในรายการ</span></div><div class="kpi"><b>${fmt(ck)}</b><span>Check-in แล้ว (${Math.round(ck*100/tot)}%)</span><div class="prog" style="margin-top:6px"><i style="width:${ck*100/tot}%"></i></div></div>
     <div class="kpi"><b>${fmt(today)}</b><span>Check-in วันนี้</span></div><div class="kpi"><b style="color:${dueN?'var(--red)':'inherit'}">${fmt(dueN)}</b><span>ถึงกำหนดติดตาม</span></div>
     <div class="kpi"><b>${Math.round(ph*100/tot)}%</b><span>มีเบอร์โทร</span></div><div class="kpi"><b>${Math.round(pn*100/tot)}%</b><span>มีพิกัดร้าน</span></div></div>
@@ -511,8 +519,8 @@ function renderDash(){
 /* ============ EXPORT ============ */
 const XLSX_URL='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 function loadXlsx(){return new Promise((res,rej)=>{if(window.XLSX)return res();const s=document.createElement('script');s.src=XLSX_URL;s.onload=res;s.onerror=()=>rej(new Error('โหลดตัวสร้าง Excel ไม่ได้ (ต้องต่ออินเทอร์เน็ต) — ใช้ CSV แทนได้'));document.head.appendChild(s)})}
-const EXP_HEAD=['รหัสสมาชิก','ชื่อ','ชื่อร้าน/ธุรกิจ (ล่าสุด)','กลุ่มลูกค้า','ประเภท','SF','ผู้ติดต่อ','เบอร์โทร','LINE','เลขที่','ถนน','ตำบล','อำเภอ','จังหวัด','รหัสไปรษณีย์','Latitude','Longitude','Google Maps','สถานะลูกค้า','เหตุผลไม่ซื้อ','คู่แข่ง/แหล่งซื้อ','ความสนใจ','จำนวนครั้ง Check-in','Check-in ล่าสุด','ผลล่าสุด','นัดติดตาม','หมายเหตุล่าสุด','รูป','ยอด เม.ย.','ยอด พ.ค.','ยอด มิ.ย.','ยอด ก.ค.','ยอด ส.ค.','ยอด ก.ย.','ยอด ต.ค.(1-25)','ยอดรวม 2026','ซื้อล่าสุด','รอ Delete','Inactive Sep26','แก้ไขข้อมูลแล้ว'];
-const expRow=c=>{const u=c.u||{},p=shopPin(c);return [c.id,c.name,V(c,'biz'),c.grp,c.seg,sfShort(c.sf),V(c,'contact'),V(c,'phone'),V(c,'line'),V(c,'house'),V(c,'road'),V(c,'subd'),V(c,'dist'),V(c,'prov'),V(c,'post'),p?p.lat:'',p?p.lng:'',p?`https://www.google.com/maps?q=${p.lat},${p.lng}`:'',u.cust_status||'',u.not_buy_reason||'',u.competitor||'',u.interest||'',u.visits||0,u.lastVisit||'',u.lastRes||'',u.next_follow||'',u.note||'',u.photo||'',c.s1,c.s2,c.s3,c.s4,c.s5,c.s6,c.s7,c.ytd,c.last,c.pdel?'Y':'',c.inact?'Y':'',c.u?'Y':'']};
+const EXP_HEAD=['รหัสสมาชิก','ชื่อ','ชื่อร้าน/ธุรกิจ (ล่าสุด)','กลุ่มลูกค้า','ประเภท','SF','ผู้ติดต่อ','เบอร์โทร','LINE','เลขที่','ถนน','ตำบล','อำเภอ','จังหวัด','รหัสไปรษณีย์','Latitude','Longitude','Google Maps','สถานะลูกค้า','เหตุผลไม่ซื้อ','คู่แข่ง/แหล่งซื้อ','ความสนใจ','จำนวนครั้ง Check-in','Check-in ล่าสุด','ผลล่าสุด','นัดติดตาม','หมายเหตุล่าสุด','รูป','ยอด เม.ย.','ยอด พ.ค.','ยอด มิ.ย.','ยอด ก.ค.','ยอด ส.ค.','ยอด ก.ย.','ยอด ต.ค.(1-25)','ยอดรวม 2026','ซื้อล่าสุด','รอ Delete','Inactive Sep26','แก้ไขข้อมูลแล้ว','สถานะพอร์ตใหม่'];
+const expRow=c=>{const u=c.u||{},p=shopPin(c);return [c.id,c.name,V(c,'biz'),c.grp,c.seg,sfShort(c.sf),V(c,'contact'),V(c,'phone'),V(c,'line'),V(c,'house'),V(c,'road'),V(c,'subd'),V(c,'dist'),V(c,'prov'),V(c,'post'),p?p.lat:'',p?p.lng:'',p?`https://www.google.com/maps?q=${p.lat},${p.lng}`:'',u.cust_status||'',u.not_buy_reason||'',u.competitor||'',u.interest||'',u.visits||0,u.lastVisit||'',u.lastRes||'',u.next_follow||'',u.note||'',u.photo||'',c.s1,c.s2,c.s3,c.s4,c.s5,c.s6,c.s7,c.ytd,c.last,c.pdel?'Y':'',c.inact?'Y':'',c.u?'Y':'',({VACANT:'ยังไม่มี SF ดูแล',OUT:'ไม่อยู่ในพอร์ตใหม่ (รอตัดออก)',NEW:'เติมใหม่',MOVED:'ย้ายมาจาก SF1405'})[c.port]||'']};
 function renderExport(){
   $('#pExport').innerHTML=`<div class="box"><h3>Export ข้อมูลติดตามลูกค้า</h3><p class="mut" style="margin-top:0">ไฟล์รวมข้อมูลต้นฉบับ + ข้อมูลที่ทีมแก้ไข/Check-in ล่าสุด · ใช้ตัวกรองในหน้ารายชื่อเพื่อเลือกกลุ่มก่อน Export ได้</p>
     <div class="field"><button class="btn red" id="xFiltX">📗 Excel — ตามตัวกรองปัจจุบัน (<span id="xN">${fmt(S.view.length)}</span> ราย)</button></div>
@@ -554,7 +562,7 @@ $('#findQ').oninput=e=>{clearTimeout(fT);const q=e.target.value.trim();const out
   fT=setTimeout(async()=>{const my=++fSeq;out.innerHTML='<div class="mut" style="text-align:center">กำลังค้นหา…</div>';
     try{const j=await api('lookup',{q});if(my!==fSeq)return;
       out.innerHTML=j.rows.map(r=>{const mine=S.user.sf!=='ALL'&&r.sf===S.user.sf;
-        return `<div class="card" style="cursor:default"><div class="main"><div class="t">${esc(r.biz||r.name)}</div><div class="s">${esc(r.id)} · ${esc(r.name)} · ${esc(r.seg||r.grp)}</div><div class="s">${esc([r.subd,r.dist].filter(Boolean).join(' / '))||'—'}</div>
+        return `<div class="card${r.sf?'':' vac'}" style="cursor:default"><div class="main"><div class="t">${esc(r.biz||r.name)}</div><div class="s">${esc(r.id)} · ${esc(r.name)} · ${esc(r.seg||r.grp)}</div><div class="s">${esc([r.subd,r.dist].filter(Boolean).join(' / '))||'—'}</div>
           <div class="tags">${r.pdel?'<span class="tag warn">รอ Delete</span>':''}${r.inact?'<span class="tag warn">Inactive</span>':''}${r.last?`<span class="tag">ซื้อล่าสุด ${esc(r.last)}</span>`:''}</div></div>
           <div class="side"><span class="tag ${r.sf?(mine?'ok':'blue'):'warn'}" style="font-size:14px;padding:5px 12px">${r.sf?(mine?'พอร์ตของคุณ':'พอร์ต '+sfShort(r.sf)):'ยังไม่มีผู้ดูแล'}</span></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบลูกค้า</div>'
     }catch(err){out.innerHTML=`<div class="box mut">ค้นหาไม่ได้: ${esc(err.message)}</div>`}},350)};
