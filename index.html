@@ -140,7 +140,10 @@ const CONFIG = {
   SHOP_RADIUS_WARN_M: 300,
   PIN_TARGET_M: 10,            // ความแม่นยำ GPS ที่ต้องการ (เมตร)
   GPS_MAX_MS: 30000,           // เวลาสูงสุดที่รอให้ GPS แม่นขึ้น
-  MAP_DEFAULT: [12.6814,101.2816]
+  MAP_DEFAULT: [12.6814,101.2816],
+  BP_SALES_KEYS: ['s4','s5','s6'],   // เดือนที่ใช้เฉลี่ยยอดซื้อ GW เทียบกับ Potential (ตอนนี้ = ก.ค.-ก.ย. 2026) — เปลี่ยนเมื่ออัปเดตข้อมูลรอบใหม่
+  BP_SALES_LABEL: 'ก.ค.–ก.ย.',
+  BP_CATS: ['เนื้อสัตว์/อาหารสด','ผักผลไม้','ของแห้ง','เครื่องดื่ม','ของใช้/บรรจุภัณฑ์']
 };
 const DEMO = !CONFIG.API_URL;
 const VISIT_RESULTS = ['พบเจ้าของ/ผู้ตัดสินใจ','พบพนักงาน/ผู้ช่วย','ร้านปิด (ไม่พบคน)','ไม่พบร้านตามที่อยู่','โทร/LINE ไม่ติด'];
@@ -148,7 +151,7 @@ const CUST_STATUS = ['เปิดกิจการ - ซื้อประจ�
 const NOT_BUY = ['ราคาสูงกว่าที่อื่น','ใช้ซัพพลายเออร์ประจำ','สินค้าไม่ครบ','ไม่สะดวกเดินทาง/ไม่มีรถ','ต้องการเครดิต','ปริมาณซื้อน้อย','ยังไม่รู้จัก/ไม่เคยใช้บริการ','อื่นๆ'];
 const CHANNELS = [['CHECKIN','ลงพื้นที่ (Check-in GPS)'],['CALL','โทรศัพท์'],['LINE','LINE']];
 const MONTHS = ['เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.*'];
-const REC_COLS = ['ts','type','id','user','channel','visit_result','cust_status','not_buy_reason','interest','competitor','contact','phone','line','biz','house','road','subd','dist','prov','post','shop_lat','shop_lng','ci_lat','ci_lng','ci_acc','ci_dist','note','next_follow','photo','device'];
+const REC_COLS = ['ts','type','id','user','channel','visit_result','cust_status','not_buy_reason','interest','competitor','contact','phone','line','biz','house','road','subd','dist','prov','post','shop_lat','shop_lng','ci_lat','ci_lng','ci_acc','ci_dist','note','next_follow','photo','device','bp_total','bp_c1','bp_c2','bp_c3','bp_c4','bp_c5','bp_freq','bp_pay'];
 const FORM_FIELDS = ['cust_status','not_buy_reason','interest','competitor','contact','phone','line','biz','house','road','subd','dist','prov','post'];
 
 /* ============ HELPERS ============ */
@@ -245,6 +248,10 @@ function mk(cols,row,u){const c={};cols.forEach((k,i)=>c[k]=row[i]);
   c.u=u||null;c.s3m=c.s5+c.s6+c.s7;return c}
 const fixPhone=v=>{v=String(v||'').trim();if(!v)return '';const d=v.replace(/[\s\-]/g,'');return /^[1-9]\d{8}$/.test(d)?'0'+d:v};
 const V=(c,k)=>{const u=c.u;const v=(u&&u[k]!==undefined&&u[k]!=='')?u[k]:(c[k]??'');return k==='phone'?fixPhone(v):v};
+const numC=x=>{const n=parseFloat(String(x??'').replace(/,/g,''));return isNaN(n)?null:n};
+const gwAvg=c=>Math.round(CONFIG.BP_SALES_KEYS.reduce((a,k)=>a+(c[k]||0),0)/CONFIG.BP_SALES_KEYS.length);
+const bpOf=c=>{const u=c.u;if(!u)return null;let t=numC(u.bp_total);if(!t){t=[1,2,3,4,5].reduce((a,i)=>a+(numC(u['bp_c'+i])||0),0)||null}
+  if(!t)return null;const gw=gwAvg(c);return{total:t,gw,gap:Math.max(0,t-gw),share:gw/t*100}};
 const num=x=>{const n=parseFloat(x);return isNaN(n)?null:n};
 const shopPin=c=>{const a=num(c.u?.shop_lat),b=num(c.u?.shop_lng);return(a&&b)?{lat:a,lng:b}:null};
 const addrLine=c=>[V(c,'house'),V(c,'bldg'),V(c,'alley'),V(c,'road')&&('ถ.'+V(c,'road')),V(c,'subd'),V(c,'dist'),V(c,'prov'),V(c,'post')].filter(Boolean).join(' ');
@@ -310,8 +317,8 @@ $('#hdUser').onclick=()=>{if(confirm('ออกจากระบบ?')){try{loc
 $('#hdRefresh').onclick=async()=>{await flushQueue();await loadData();toast('อัปเดตข้อมูลแล้ว')};
 
 /* ============ FILTERS & LIST ============ */
-const STATUS_OPTS=[['all','ทั้งหมด'],['notyet','ยังไม่เคย Check-in'],['done','Check-in แล้ว'],['due','ถึงกำหนดติดตาม'],['incomplete','ข้อมูลไม่ครบ (ไม่มีเบอร์/พิกัด)'],['nophone','ยังไม่มีเบอร์โทร'],['nopin','ยังไม่ปักพิกัด'],['buy3','ซื้อใน 3 เดือนล่าสุด'],['nobuy3','ไม่ซื้อ 3 เดือนล่าสุด'],['pdel','รอ Delete / Inactive'],['out','🔴 ไม่อยู่ในพอร์ตใหม่ (กล่องแดง)'],['newp','เติมใหม่ / ย้ายเข้าพอร์ต'],['vac','🟡 ยังไม่มี SF ดูแล (กล่องเหลือง)']];
-const SORT_OPTS=[['sales','เรียง: ยอดซื้อ 3 เดือน สูง→ต่ำ'],['cur','เรียง: ยอดเดือนนี้ สูง→ต่ำ'],['ytd','เรียง: ยอดรวมปี 2026 สูง→ต่ำ'],['name','เรียง: ชื่อ ก-ฮ'],['near','เรียง: ใกล้ฉันที่สุด'],['due','เรียง: นัดติดตามใกล้สุด'],['last','เรียง: Check-in ล่าสุด']];
+const STATUS_OPTS=[['all','ทั้งหมด'],['notyet','ยังไม่เคย Check-in'],['done','Check-in แล้ว'],['due','ถึงกำหนดติดตาม'],['incomplete','ข้อมูลไม่ครบ (ไม่มีเบอร์/พิกัด)'],['nophone','ยังไม่มีเบอร์โทร'],['nopin','ยังไม่ปักพิกัด'],['buy3','ซื้อใน 3 เดือนล่าสุด'],['nobuy3','ไม่ซื้อ 3 เดือนล่าสุด'],['pdel','รอ Delete / Inactive'],['out','🔴 ไม่อยู่ในพอร์ตใหม่ (กล่องแดง)'],['newp','เติมใหม่ / ย้ายเข้าพอร์ต'],['vac','🟡 ยังไม่มี SF ดูแล (กล่องเหลือง)'],['nobp','💰 ยังไม่มีข้อมูล Potential'],['hasbp','💰 มีข้อมูล Potential แล้ว']];
+const SORT_OPTS=[['sales','เรียง: ยอดซื้อ 3 เดือน สูง→ต่ำ'],['gap','เรียง: ช่องว่างโอกาส (Potential) สูง→ต่ำ'],['sow','เรียง: Share of Wallet ต่ำ→สูง'],['cur','เรียง: ยอดเดือนนี้ สูง→ต่ำ'],['ytd','เรียง: ยอดรวมปี 2026 สูง→ต่ำ'],['name','เรียง: ชื่อ ก-ฮ'],['near','เรียง: ใกล้ฉันที่สุด'],['due','เรียง: นัดติดตามใกล้สุด'],['last','เรียง: Check-in ล่าสุด']];
 function buildFilters(){
   const opts=(arr,all)=>`<option value="">${all}</option>`+[...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th')).map(x=>`<option>${esc(x)}</option>`).join('');
   $('#fStatus').innerHTML=STATUS_OPTS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
@@ -329,10 +336,10 @@ function applyFilters(){
     if(f.sf){if(f.sf==='__none'){if(c.sf)return false}else if(c.sf!==f.sf)return false}
     switch(f.status){case'notyet':if(checked(c))return false;break;case'done':if(!checked(c))return false;break;case'due':if(!due(c))return false;break;
       case'incomplete':if(!incomplete(c))return false;break;case'nophone':if(V(c,'phone'))return false;break;case'nopin':if(shopPin(c))return false;break;
-      case'buy3':if(!(c.s3m>0))return false;break;case'nobuy3':if(c.s3m>0)return false;break;case'pdel':if(!(c.pdel||c.inact))return false;break;case'out':if(c.port!=='OUT')return false;break;case'vac':if(c.port!=='VACANT')return false;break;case'newp':if(c.port!=='NEW'&&c.port!=='MOVED')return false;break}
+      case'buy3':if(!(c.s3m>0))return false;break;case'nobuy3':if(c.s3m>0)return false;break;case'pdel':if(!(c.pdel||c.inact))return false;break;case'out':if(c.port!=='OUT')return false;break;case'vac':if(c.port!=='VACANT')return false;break;case'nobp':if(bpOf(c))return false;break;case'hasbp':if(!bpOf(c))return false;break;case'newp':if(c.port!=='NEW'&&c.port!=='MOVED')return false;break}
     if(q){const hay=(c.id+' '+c.name+' '+V(c,'biz')+' '+V(c,'phone')+' '+V(c,'contact')+' '+addrLine(c)).toLowerCase();if(!hay.includes(q))return false}
     return true});
-  const cmp={name:(a,b)=>title(a).localeCompare(title(b),'th'),sales:(a,b)=>b.s3m-a.s3m||b.ytd-a.ytd,cur:(a,b)=>b.s7-a.s7||b.s3m-a.s3m,ytd:(a,b)=>b.ytd-a.ytd,
+  const cmp={name:(a,b)=>title(a).localeCompare(title(b),'th'),sales:(a,b)=>b.s3m-a.s3m||b.ytd-a.ytd,gap:(a,b)=>((bpOf(b)?.gap)??-1)-((bpOf(a)?.gap)??-1),sow:(a,b)=>((bpOf(a)?.share)??1e9)-((bpOf(b)?.share)??1e9),cur:(a,b)=>b.s7-a.s7||b.s3m-a.s3m,ytd:(a,b)=>b.ytd-a.ytd,
     due:(a,b)=>(a.u?.next_follow||'9')>(b.u?.next_follow||'9')?1:-1,last:(a,b)=>(b.u?.lastVisit||'').localeCompare(a.u?.lastVisit||'')};
   if(f.sort==='near'&&S.pos){v.forEach(c=>{const p=shopPin(c);c._d=p?hav(S.pos.lat,S.pos.lng,p.lat,p.lng):1e12});v.sort((a,b)=>a._d-b._d)}
   else v.sort(cmp[f.sort==='near'?'name':f.sort]);
@@ -350,6 +357,7 @@ function renderList(){
     if(c.u?.cust_status)tg.push(`<span class="tag blue">${esc(c.u.cust_status.replace('เปิดกิจการ - ',''))}</span>`);
     if(c.pdel||c.inact)tg.push('<span class="tag warn">รอ Delete/Inactive</span>');
     if(c.port==='OUT')tg.unshift('<span class="tag bad">🔴 ไม่อยู่ในพอร์ตใหม่ (รอตัดออก)</span>');
+    {const b=bpOf(c);if(b)tg.push(`<span class="tag ok">💰 ${fmt(b.total)} · SoW ${Math.round(b.share)}% · ช่องว่าง ${fmt(b.gap)}</span>`)}
     if(c.port==='VACANT')tg.unshift('<span class="tag warn">🟡 ยังไม่มี SF ดูแล</span>');
     if(c.port==='NEW')tg.push('<span class="tag blue">เติมใหม่</span>');
     if(c.port==='MOVED')tg.push('<span class="tag blue">ย้ายมาจาก SF1405</span>');
@@ -387,6 +395,9 @@ function openDetail(id){
         ${kv('ผู้ติดต่อ',V(c,'contact'))}${kv('เบอร์โทร',ph)}${kv('LINE',V(c,'line'))}${kv('ที่อยู่',addrLine(c))}
         ${kv('พิกัดร้าน',shopPin(c)?`${(+u.shop_lat).toFixed(5)}, ${(+u.shop_lng).toFixed(5)}`:'ยังไม่ปักพิกัด')}
         ${kv('SF ดูแล',sfShort(c.sf))}${kv('วันสมัคร',c.reg)}${kv('ซื้อล่าสุด',lastLabel(c))}${kv('ยอดเดือนนี้ (1-25 ต.ค.)',fmt(c.s7)+' บ.')}${kv('ยอด 3 เดือนล่าสุด',fmt(c.s3m)+' บ.')}${c.pdel?kv('สถานะ','รอ Delete ออกจากระบบ'):''}${c.inact?kv('สถานะ',c.inact&&'Inactive Sep 26'):''}</div></div>
+      ${(()=>{const b=bpOf(c);if(!b)return '<div class="box"><h3>💰 Buying Potential</h3><span class="mut">ยังไม่มีข้อมูล — กด "แก้ไขข้อมูล" เพื่อกรอกยอดซื้อต่อเดือนของลูกค้า</span></div>';
+        const cats=CONFIG.BP_CATS.map((n,i)=>numC(u['bp_c'+(i+1)])?`${n} ${fmt(numC(u['bp_c'+(i+1)]))}`:'').filter(Boolean).join(' · ');
+        return `<div class="box"><h3>💰 Buying Potential</h3><div class="kv">${kv('Potential/เดือน',fmt(b.total)+' บ.')}${kv('ซื้อกับ GW เฉลี่ย',fmt(b.gw)+` บ. (${CONFIG.BP_SALES_LABEL})`)}${kv('Share of Wallet',Math.round(b.share)+'%')}${kv('ช่องว่างโอกาส',fmt(b.gap)+' บ./เดือน')}${kv('แยกหมวด',cats)}${kv('ความถี่ซื้อ',u.bp_freq&&u.bp_freq+' ครั้ง/สัปดาห์')}${kv('การชำระ',u.bp_pay)}</div></div>`})()}
       <div class="box"><h3>ยอดขายรายเดือน (บาท) — ต.ค. = 1-25 ต.ค.</h3><div class="bars">${[c.s1,c.s2,c.s3,c.s4,c.s5,c.s6,c.s7].map((v,i)=>`<div><i style="height:${Math.round(v/mx*52)}px"></i>${fmt(v)}<br>${MONTHS[i]}</div>`).join('')}</div></div>
       <div class="box"><h3>ประวัติ Check-in / แก้ไขล่าสุด</h3><div id="hist" class="mut">กำลังโหลด…</div></div>
     </div>
@@ -430,7 +441,14 @@ function openForm(c,mode){
       <div class="field"><label>หมายเหตุ</label><textarea id="f_note" placeholder="รายละเอียดการคุย / สิ่งที่ต้องทำต่อ">${isCi?'':esc(u.note||'')}</textarea></div>
       ${pinBox}
       <details ${isCi?'':'open'}><summary>ข้อมูลลูกค้า · ที่อยู่ ${isCi?'(แก้ไขได้ถ้าไม่ถูกต้อง)':''}</summary><div style="margin-top:10px">${detailsBody}</div></details>
-    </div>
+          <details ${isCi?'':'open'} id="bpBox"><summary>💰 Buying Potential (ยอดซื้อต่อเดือนของลูกค้า)</summary><div style="margin-top:10px">
+        <div class="field"><label>ยอดซื้อสินค้า/วัตถุดิบรวมต่อเดือน (บาท โดยประมาณ — ซื้อจากทุกแหล่ง)</label><input class="bpi" id="f_bp_total" inputmode="numeric" value="${esc(u.bp_total||'')}"></div>
+        <div class="mut" style="margin:0 0 6px">แยกตามหมวด (ไม่บังคับ — ถ้าไม่กรอกยอดรวม ระบบรวมจากหมวดให้)</div>
+        <div class="two">${CONFIG.BP_CATS.map((n,k)=>`<div class="field"><label>${n}</label><input class="bpi" id="f_bp_c${k+1}" inputmode="numeric" value="${esc(u['bp_c'+(k+1)]||'')}"></div>`).join('')}</div>
+        <div class="two"><div class="field"><label>ความถี่การซื้อ (ครั้ง/สัปดาห์)</label><input class="bpi" id="f_bp_freq" inputmode="numeric" value="${esc(u.bp_freq||'')}"></div>
+          <div class="field"><label>การชำระเงิน</label><select id="f_bp_pay">${opt(['เงินสด','เครดิต','ทั้งสองแบบ'],u.bp_pay||'')}</select></div></div>
+        <div id="bpPrev" class="gps"></div></div></details>
+</div>
     <div class="ft"><button class="btn grey" id="fCancel" style="flex:1">ยกเลิก</button><button class="btn red" id="fSave" style="flex:2">${isCi?'บันทึก Check-in':'บันทึกข้อมูล'}</button></div>`);
   const $$=s=>$(s,bg);
   const pinTxt=()=>{const p=newPin||pin;$$('#pinTxt').textContent=(p&&p.lat!=='')?`${(+p.lat).toFixed(6)}, ${(+p.lng).toFixed(6)}${newPin?(newPin.manual?' (ปรับเอง)':(newPin.acc?` (GPS ±${Math.round(newPin.acc)} ม.)`:' (ใหม่)')):''}`:'ยังไม่ปักหมุด'};pinTxt();
@@ -444,6 +462,10 @@ function openForm(c,mode){
   $$('#pinMap').onclick=()=>openPinPicker(newPin&&newPin.lat!==''?newPin:pin,title(c),p=>{newPin={lat:p.lat,lng:p.lng,manual:true};pinTxt();toast('ปรับหมุดแล้ว (อย่าลืมกดบันทึก)')});
   $$('#pinClr').onclick=()=>{newPin={lat:'',lng:''};pinTxt();$$('#pinTxt').textContent='จะล้างพิกัดเมื่อบันทึก'};
   $$('#f_photo').onchange=async e=>{const f=e.target.files[0];if(f){try{photoData=await resizePhoto(f);toast('แนบรูปแล้ว')}catch(err){toast('อ่านรูปไม่ได้')}}};
+  const bpPrev=()=>{const g=k=>numC($$('#f_'+k)?.value);const sum=[1,2,3,4,5].reduce((a,i)=>a+(g('bp_c'+i)||0),0);const tot=g('bp_total')||sum;const gw=gwAvg(c);const el=$$('#bpPrev');
+    if(!tot){el.className='gps';el.textContent=`ซื้อกับ GW เฉลี่ย ${fmt(gw)} บ./เดือน (${CONFIG.BP_SALES_LABEL}) — กรอกยอดรวมเพื่อคำนวณช่องว่าง`;return}
+    el.className='gps ok';el.innerHTML=`Potential <b>${fmt(tot)}</b> บ./เดือน · ซื้อกับ GW เฉลี่ย ${fmt(gw)}<br><b>Share of Wallet ${Math.round(gw/tot*100)}%</b> · <b>ช่องว่างโอกาส ${fmt(Math.max(0,tot-gw))}</b>`+(gw>tot?`<br><span class="mut">⚠️ ยอดที่ซื้อกับ GW จริงสูงกว่าที่กรอก — ตรวจสอบตัวเลข</span>`:'')+(sum&&g('bp_total')&&Math.abs(sum-g('bp_total'))>1?`<br><span class="mut">⚠️ ผลรวมหมวด ${fmt(sum)} ไม่เท่ายอดรวม</span>`:'')};
+  bg.querySelectorAll('.bpi').forEach(x=>x.oninput=bpPrev);bpPrev();
   $$('#fCancel').onclick=()=>{stopGps&&stopGps();stopPin&&stopPin();close()};
   let stopGps=null,gpsDone=false;
   const upGps=()=>{const bx=$$('#gpsBox');if(!bx||!gps)return;const a=Math.round(gps.acc),okAcc=gps.acc<=CONFIG.PIN_TARGET_M;
@@ -472,6 +494,8 @@ function openForm(c,mode){
       interest:[...bg.querySelectorAll('.int:checked')].map(x=>x.value).join(','),
       contact:v('contact'),phone:fixPhone(v('phone')),line:v('line'),biz:v('biz'),house:v('house'),road:v('road'),subd:v('subd'),dist:v('dist'),prov:v('prov'),post:v('post'),
       note:v('note'),next_follow:v('next_follow'),photo:u.photo||''};
+    {const cats=[1,2,3,4,5].map(i=>v('bp_c'+i).replace(/,/g,''));const sc=cats.reduce((a,x)=>a+(numC(x)||0),0);const bt=v('bp_total').replace(/,/g,'');
+      rec.bp_total=bt||(sc?String(sc):'');cats.forEach((x,i)=>rec['bp_c'+(i+1)]=x);rec.bp_freq=v('bp_freq');rec.bp_pay=v('bp_pay')}
     const p=newPin||pin; rec.shop_lat=(p&&p.lat!=='')?p.lat:'';rec.shop_lng=(p&&p.lat!=='')?p.lng:'';
     if(isCi&&ch==='CHECKIN'&&gps){rec.ci_lat=gps.lat;rec.ci_lng=gps.lng;rec.ci_acc=Math.round(gps.acc);rec.ci_dist=gps.d!=null?Math.round(gps.d):''}
     S.queue.push({rec,photoData});lsSet('gw_queue',S.queue);
@@ -507,21 +531,26 @@ function renderDash(){
   const cnt=(arr)=>{const m={};arr.filter(Boolean).forEach(x=>m[x]=(m[x]||0)+1);return Object.entries(m).sort((a,b)=>b[1]-a[1])};
   const bars=(arr)=>{const mx=Math.max(1,...arr.map(a=>a[1]));return arr.map(([l,n])=>`<div class="hbar"><span class="l">${esc(l)}</span><span class="p"><i style="width:${n/mx*100}%"></i></span><span class="n">${fmt(n)}</span></div>`).join('')||'<span class="mut">ยังไม่มีข้อมูล</span>'};
   let sfTbl='';
-  if(S.user.sf==='ALL'){const m={};A.forEach(c=>{const k=c.sf||'—';const o=m[k]||(m[k]={t:0,c:0,d:0,td:0,p:0,pn:0,out:0});if(c.port==='OUT')o.out++;o.t++;if(checked(c))o.c++;if(due(c))o.d++;if(c.u?.lastVisit?.startsWith(td))o.td++;if(V(c,'phone'))o.p++;if(shopPin(c))o.pn++});
-    sfTbl=`<div class="box"><h3>แยกตามพอร์ต</h3><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>ลูกค้า</th><th>Check-in</th><th>%</th><th>วันนี้</th><th>ถึงนัด</th><th>มีเบอร์</th><th>มีพิกัด</th><th>🔴 รอตัดออก</th></tr>${Object.entries(m).sort().map(([k,o])=>`<tr><td>${k==='—'?'ไม่มี SF':sfShort(k)}</td><td>${fmt(o.t)}</td><td>${fmt(o.c)}</td><td>${Math.round(o.c*100/o.t)}%</td><td>${o.td}</td><td>${o.d}</td><td>${Math.round(o.p*100/o.t)}%</td><td>${Math.round(o.pn*100/o.t)}%</td><td>${o.out||'-'}</td></tr>`).join('')}</table></div></div>`}
+  if(S.user.sf==='ALL'){const m={};A.forEach(c=>{const k=c.sf||'—';const o=m[k]||(m[k]={t:0,c:0,d:0,td:0,p:0,pn:0,out:0});if(c.port==='OUT')o.out++;{const b=bpOf(c);if(b){o.bpT=(o.bpT||0)+b.total;o.bpW=(o.bpW||0)+b.gw}}o.t++;if(checked(c))o.c++;if(due(c))o.d++;if(c.u?.lastVisit?.startsWith(td))o.td++;if(V(c,'phone'))o.p++;if(shopPin(c))o.pn++});
+    sfTbl=`<div class="box"><h3>แยกตามพอร์ต</h3><div style="overflow:auto"><table class="t"><tr><th>SF</th><th>ลูกค้า</th><th>Check-in</th><th>%</th><th>วันนี้</th><th>ถึงนัด</th><th>มีเบอร์</th><th>มีพิกัด</th><th>🔴 รอตัดออก</th><th>SoW</th></tr>${Object.entries(m).sort().map(([k,o])=>`<tr><td>${k==='—'?'ไม่มี SF':sfShort(k)}</td><td>${fmt(o.t)}</td><td>${fmt(o.c)}</td><td>${Math.round(o.c*100/o.t)}%</td><td>${o.td}</td><td>${o.d}</td><td>${Math.round(o.p*100/o.t)}%</td><td>${Math.round(o.pn*100/o.t)}%</td><td>${o.out||'-'}</td><td>${o.bpT?Math.round(o.bpW*100/o.bpT)+'%':'-'}</td></tr>`).join('')}</table></div></div>`}
   el.innerHTML=`<div class="kpis"><div class="kpi"><b>${fmt(tot)}</b><span>ลูกค้าในรายการ</span></div><div class="kpi"><b>${fmt(ck)}</b><span>Check-in แล้ว (${Math.round(ck*100/tot)}%)</span><div class="prog" style="margin-top:6px"><i style="width:${ck*100/tot}%"></i></div></div>
     <div class="kpi"><b>${fmt(today)}</b><span>Check-in วันนี้</span></div><div class="kpi"><b style="color:${dueN?'var(--red)':'inherit'}">${fmt(dueN)}</b><span>ถึงกำหนดติดตาม</span></div>
     <div class="kpi"><b>${Math.round(ph*100/tot)}%</b><span>มีเบอร์โทร</span></div><div class="kpi"><b>${Math.round(pn*100/tot)}%</b><span>มีพิกัดร้าน</span></div></div>
+    ${(()=>{const L=A.map(c=>({c,b:bpOf(c)})).filter(x=>x.b);if(!L.length)return '<div class="box"><h3>💰 Buying Potential</h3><span class="mut">ยังไม่มีข้อมูล Potential — เซลส์กรอกได้ในหน้า Check-in / แก้ไขข้อมูล</span></div>';
+      const T=L.reduce((a,x)=>a+x.b.total,0),G=L.reduce((a,x)=>a+x.b.gap,0),W=L.reduce((a,x)=>a+x.b.gw,0);
+      return `<div class="box"><h3>💰 Buying Potential (${fmt(L.length)} ราย)</h3><div class="kv"><span>Potential รวม/เดือน</span><span><b>${fmt(T)}</b> บ.</span><span>ซื้อกับ GW เฉลี่ย</span><span>${fmt(W)} บ.</span><span>Share of Wallet รวม</span><span><b>${Math.round(W*100/T)}%</b></span><span>ช่องว่างโอกาส</span><span><b>${fmt(G)}</b> บ./เดือน</span></div>
+      <h3 style="margin-top:12px">Top 10 ช่องว่างโอกาสสูงสุด (แตะเพื่อเปิด)</h3>${L.sort((a,b)=>b.b.gap-a.b.gap).slice(0,10).map(x=>`<div class="hbar toprow" data-id="${esc(x.c.id)}" style="cursor:pointer"><span class="l">${esc(title(x.c))}</span><span class="p"><i style="width:${Math.min(100,x.b.share)}%;background:var(--ok)"></i></span><span class="n" style="width:auto">${fmt(x.b.gap)}</span></div>`).join('')}</div>`})()}
     ${sfTbl}<div class="box"><h3>ผลการติดตามล่าสุด</h3>${bars(cnt(A.map(c=>c.u?.lastRes)))}</div>
     <div class="box"><h3>สถานะลูกค้าปัจจุบัน</h3>${bars(cnt(A.map(c=>c.u?.cust_status)))}</div>
     <div class="box"><h3>เหตุผลที่ไม่ซื้อ</h3>${bars(cnt(A.map(c=>c.u?.not_buy_reason)))}</div>`;
 }
 
+$('#pDash').onclick=e=>{const r=e.target.closest('.toprow');if(r)openDetail(r.dataset.id)};
 /* ============ EXPORT ============ */
 const XLSX_URL='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 function loadXlsx(){return new Promise((res,rej)=>{if(window.XLSX)return res();const s=document.createElement('script');s.src=XLSX_URL;s.onload=res;s.onerror=()=>rej(new Error('โหลดตัวสร้าง Excel ไม่ได้ (ต้องต่ออินเทอร์เน็ต) — ใช้ CSV แทนได้'));document.head.appendChild(s)})}
-const EXP_HEAD=['รหัสสมาชิก','ชื่อ','ชื่อร้าน/ธุรกิจ (ล่าสุด)','กลุ่มลูกค้า','ประเภท','SF','ผู้ติดต่อ','เบอร์โทร','LINE','เลขที่','ถนน','ตำบล','อำเภอ','จังหวัด','รหัสไปรษณีย์','Latitude','Longitude','Google Maps','สถานะลูกค้า','เหตุผลไม่ซื้อ','คู่แข่ง/แหล่งซื้อ','ความสนใจ','จำนวนครั้ง Check-in','Check-in ล่าสุด','ผลล่าสุด','นัดติดตาม','หมายเหตุล่าสุด','รูป','ยอด เม.ย.','ยอด พ.ค.','ยอด มิ.ย.','ยอด ก.ค.','ยอด ส.ค.','ยอด ก.ย.','ยอด ต.ค.(1-25)','ยอดรวม 2026','ซื้อล่าสุด','รอ Delete','Inactive Sep26','แก้ไขข้อมูลแล้ว','สถานะพอร์ตใหม่'];
-const expRow=c=>{const u=c.u||{},p=shopPin(c);return [c.id,c.name,V(c,'biz'),c.grp,c.seg,sfShort(c.sf),V(c,'contact'),V(c,'phone'),V(c,'line'),V(c,'house'),V(c,'road'),V(c,'subd'),V(c,'dist'),V(c,'prov'),V(c,'post'),p?p.lat:'',p?p.lng:'',p?`https://www.google.com/maps?q=${p.lat},${p.lng}`:'',u.cust_status||'',u.not_buy_reason||'',u.competitor||'',u.interest||'',u.visits||0,u.lastVisit||'',u.lastRes||'',u.next_follow||'',u.note||'',u.photo||'',c.s1,c.s2,c.s3,c.s4,c.s5,c.s6,c.s7,c.ytd,c.last,c.pdel?'Y':'',c.inact?'Y':'',c.u?'Y':'',({VACANT:'ยังไม่มี SF ดูแล',OUT:'ไม่อยู่ในพอร์ตใหม่ (รอตัดออก)',NEW:'เติมใหม่',MOVED:'ย้ายมาจาก SF1405'})[c.port]||'']};
+const EXP_HEAD=['รหัสสมาชิก','ชื่อ','ชื่อร้าน/ธุรกิจ (ล่าสุด)','กลุ่มลูกค้า','ประเภท','SF','ผู้ติดต่อ','เบอร์โทร','LINE','เลขที่','ถนน','ตำบล','อำเภอ','จังหวัด','รหัสไปรษณีย์','Latitude','Longitude','Google Maps','สถานะลูกค้า','เหตุผลไม่ซื้อ','คู่แข่ง/แหล่งซื้อ','ความสนใจ','จำนวนครั้ง Check-in','Check-in ล่าสุด','ผลล่าสุด','นัดติดตาม','หมายเหตุล่าสุด','รูป','ยอด เม.ย.','ยอด พ.ค.','ยอด มิ.ย.','ยอด ก.ค.','ยอด ส.ค.','ยอด ก.ย.','ยอด ต.ค.(1-25)','ยอดรวม 2026','ซื้อล่าสุด','รอ Delete','Inactive Sep26','แก้ไขข้อมูลแล้ว','สถานะพอร์ตใหม่','Buying Potential/เดือน','ยอด เนื้อสัตว์/อาหารสด','ยอด ผักผลไม้','ยอด ของแห้ง','ยอด เครื่องดื่ม','ยอด ของใช้/บรรจุภัณฑ์','ความถี่ซื้อ/สัปดาห์','การชำระ','GW เฉลี่ย/เดือน','ช่องว่างโอกาส','Share GW %'];
+const expRow=c=>{const u=c.u||{},p=shopPin(c);return [c.id,c.name,V(c,'biz'),c.grp,c.seg,sfShort(c.sf),V(c,'contact'),V(c,'phone'),V(c,'line'),V(c,'house'),V(c,'road'),V(c,'subd'),V(c,'dist'),V(c,'prov'),V(c,'post'),p?p.lat:'',p?p.lng:'',p?`https://www.google.com/maps?q=${p.lat},${p.lng}`:'',u.cust_status||'',u.not_buy_reason||'',u.competitor||'',u.interest||'',u.visits||0,u.lastVisit||'',u.lastRes||'',u.next_follow||'',u.note||'',u.photo||'',c.s1,c.s2,c.s3,c.s4,c.s5,c.s6,c.s7,c.ytd,c.last,c.pdel?'Y':'',c.inact?'Y':'',c.u?'Y':'',({VACANT:'ยังไม่มี SF ดูแล',OUT:'ไม่อยู่ในพอร์ตใหม่ (รอตัดออก)',NEW:'เติมใหม่',MOVED:'ย้ายมาจาก SF1405'})[c.port]||'',...(()=>{const b=bpOf(c);return [b?b.total:'',u.bp_c1||'',u.bp_c2||'',u.bp_c3||'',u.bp_c4||'',u.bp_c5||'',u.bp_freq||'',u.bp_pay||'',b?Math.round(b.gw):'',b?Math.round(b.gap):'',b?Math.round(b.share):'']})()]};
 function renderExport(){
   $('#pExport').innerHTML=`<div class="box"><h3>Export ข้อมูลติดตามลูกค้า</h3><p class="mut" style="margin-top:0">ไฟล์รวมข้อมูลต้นฉบับ + ข้อมูลที่ทีมแก้ไข/Check-in ล่าสุด · ใช้ตัวกรองในหน้ารายชื่อเพื่อเลือกกลุ่มก่อน Export ได้</p>
     <div class="field"><button class="btn red" id="xFiltX">📗 Excel — ตามตัวกรองปัจจุบัน (<span id="xN">${fmt(S.view.length)}</span> ราย)</button></div>
