@@ -141,6 +141,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
 <script>
 /* ============ CONFIG ============ */
 const CONFIG = {
+  BRANCH: { lat: null, lng: null },   // พิกัด Go Wholesale ระยอง (จุดตั้งต้น/จุดกลับ) — ใส่ที่นี่เพื่อใช้ร่วมกันทุกเครื่อง หรือให้เซลส์ตั้งเองในหน้าแผนวันนี้
   API_URL: 'https://script.google.com/macros/s/AKfycbxyOxVY6jxbDx-JUwhLIyZgBikOlgPlY0eAiY6NYh30p0APXHS77fg3HbDjkWKiy-rNvg/exec',                 // ← วาง Web App URL ของ Apps Script ที่นี่ (เว้นว่าง = โหมดทดลอง)
   DEMO_DATA: 'demo-data.json',
   SF_LIST: ['1401','1402','1403','1404','1405','1406','1407','1408','1409','1410','1411','1412','1413'],
@@ -555,27 +556,29 @@ function renderDash(){
 
 
 /* ============ สรุประยะการเดินทาง (จากพิกัด Check-in) ============ */
+const branchPt=()=>{const c=(typeof CONFIG!=='undefined'&&CONFIG.BRANCH)||{};if(c.lat&&c.lng)return{lat:+c.lat,lng:+c.lng};const l=lsGet('gw_branch',null);return l&&l.lat?l:null};
 const km1=m=>(m/1000).toFixed(1);
 const hhmm=t=>(t||'').slice(11,16);
 async function getTravel(force){
-  const qn=S.queue.length;if(!force&&S.travel&&S.travel.q===qn&&Date.now()-S.travel.t<60000)return S.travel.d;
+  const qn=S.queue.length,bk=JSON.stringify(branchPt());if(!force&&S.travel&&S.travel.q===qn&&S.travel.b===bk&&Date.now()-S.travel.t<60000)return S.travel.d;
   const j=await api('log',{sf:S.user.sf}),ix={};j.cols.forEach((c,i)=>ix[c]=i);
   const rows=j.rows.filter(r=>r[ix.type]==='CHECKIN').map(r=>({ts:String(r[ix.ts]),id:r[ix.id],user:r[ix.user],lat:+r[ix.ci_lat],lng:+r[ix.ci_lng]}))
     .concat(S.queue.map(q=>q.rec).filter(r=>r.type==='CHECKIN'&&r.ci_lat).map(r=>({ts:String(r.ts),id:r.id,user:r.user,lat:+r.ci_lat,lng:+r.ci_lng}))).filter((x,i,a)=>a.findIndex(y=>y.ts===x.ts&&y.id===x.id)===i).filter(x=>x.lat&&x.lng&&isFinite(x.lat)&&isFinite(x.lng)).sort((a,b)=>a.ts<b.ts?-1:1);
   const G={};rows.forEach(r=>{const k=r.user+'|'+r.ts.slice(0,10);(G[k]=G[k]||{user:r.user,date:r.ts.slice(0,10),stops:[],m:0}).stops.push(r)});
-  const d=Object.values(G);d.forEach(g=>{g.stops.forEach((x,i)=>{x.leg=i?hav(g.stops[i-1].lat,g.stops[i-1].lng,x.lat,x.lng):0;g.m+=x.leg})});
-  d.sort((a,b)=>a.date<b.date?1:-1);S.travel={t:Date.now(),q:qn,d};return d;
+  const B=branchPt(),d=Object.values(G);d.forEach(g=>{g.stops.forEach((x,i)=>{x.leg=i?hav(g.stops[i-1].lat,g.stops[i-1].lng,x.lat,x.lng):(B?hav(B.lat,B.lng,x.lat,x.lng):0);g.m+=x.leg});const L=g.stops[g.stops.length-1];g.back=B?hav(L.lat,L.lng,B.lat,B.lng):0;g.m+=g.back;g.hasB=!!B});
+  d.sort((a,b)=>a.date<b.date?1:-1);S.travel={t:Date.now(),q:qn,b:bk,d};return d;
 }
 const trvOf=(d,user,date)=>d.find(g=>g.user===user&&g.date===date);
 const stopRow=(x,i)=>{const c=S.byId[x.id];return [i+1,hhmm(x.ts),x.id,c?title(c):'',c?[V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '):'',+km1(x.leg),`https://www.google.com/maps?q=${x.lat},${x.lng}`]};
-const STOP_HEAD=['ลำดับ','เวลา','รหัสสมาชิก','ชื่อร้าน','ตำบล/อำเภอ','ระยะจากร้านก่อนหน้า (กม.)','พิกัด Check-in'];
+const STOP_HEAD=['ลำดับ','เวลา','รหัสสมาชิก','ชื่อร้าน','ตำบล/อำเภอ','ระยะจากจุดก่อนหน้า (กม.)','พิกัด Check-in'];
+const backRow=(g,n)=>g.hasB?[n+1,'','','กลับสาขา Go Wholesale ระยอง','',+km1(g.back),'']:null;
 async function exportTravelXlsx(user,date,d){
   await loadXlsx();const g=trvOf(d,user,date);if(!g)return toast('ยังไม่มี Check-in พร้อมพิกัดในวันนี้');
   const mon=date.slice(0,7),days=d.filter(x=>x.user===user&&x.date.startsWith(mon)).sort((a,b)=>a.date<b.date?-1:1);
   const wb=XLSX.utils.book_new(),A=g.stops;
-  const sum=[['สรุปการเดินทาง',sfShort(user)],['วันที่',date],['จำนวนร้านที่ Check-in',A.length],['ระยะทางรวม (กม.)',+km1(g.m)],['เวลาแรก',hhmm(A[0].ts)],['เวลาสุดท้าย',hhmm(A[A.length-1].ts)],['หมายเหตุ','คำนวณเป็นเส้นตรงระหว่างจุด Check-in ที่ต่อเนื่องกัน (ไม่รวมช่วงออกจาก/กลับสาขา) ตัวเลขจริงบนถนนอาจสูงกว่าเล็กน้อย']];
+  const sum=[['สรุปการเดินทาง',sfShort(user)],['วันที่',date],['จำนวนร้านที่ Check-in',A.length],['ระยะทางรวม (กม.)',+km1(g.m)],['จากสาขา → ร้านแรก (กม.)',g.hasB?+km1(A[0].leg):'ยังไม่ได้ตั้งพิกัดสาขา'],['ระหว่างร้าน (กม.)',+km1(g.m-g.back-(g.hasB?A[0].leg:0))],['ร้านสุดท้าย → กลับสาขา (กม.)',g.hasB?+km1(g.back):'-'],['เวลาแรก',hhmm(A[0].ts)],['เวลาสุดท้าย',hhmm(A[A.length-1].ts)],['หมายเหตุ','คำนวณเป็นเส้นตรง: สาขา Go Wholesale ระยอง → ร้านที่ Check-in ตามลำดับ → กลับสาขา (ถ้ายังไม่ได้ตั้งพิกัดสาขา จะนับเฉพาะระหว่างร้าน) ตัวเลขจริงบนถนนอาจสูงกว่าเล็กน้อย']];
   const w1=XLSX.utils.aoa_to_sheet(sum);w1['!cols']=[{wch:26},{wch:60}];XLSX.utils.book_append_sheet(wb,w1,'สรุป');
-  const w2=XLSX.utils.aoa_to_sheet([STOP_HEAD,...A.map(stopRow)]);w2['!cols']=[{wch:7},{wch:8},{wch:14},{wch:34},{wch:24},{wch:22},{wch:40}];XLSX.utils.book_append_sheet(wb,w2,'รายร้าน');
+  const w2=XLSX.utils.aoa_to_sheet([STOP_HEAD,...A.map(stopRow),...(backRow(g,A.length)?[backRow(g,A.length)]:[])]);w2['!cols']=[{wch:7},{wch:8},{wch:14},{wch:34},{wch:24},{wch:22},{wch:40}];XLSX.utils.book_append_sheet(wb,w2,'รายร้าน');
   const w3=XLSX.utils.aoa_to_sheet([['วันที่','จำนวนร้าน','ระยะทางรวม (กม.)'],...days.map(x=>[x.date,x.stops.length,+km1(x.m)]),['รวมเดือนนี้',days.reduce((a,x)=>a+x.stops.length,0),+km1(days.reduce((a,x)=>a+x.m,0))]]);w3['!cols']=[{wch:14},{wch:12},{wch:20}];XLSX.utils.book_append_sheet(wb,w3,'รายวันในเดือน');
   XLSX.writeFile(wb,`GW_Travel_${sfShort(user)}_${date.replace(/-/g,'')}.xlsx`);
 }
@@ -585,8 +588,8 @@ function printTravel(user,date,d){
   let el=$('#printView');if(!el){el=document.createElement('div');el.id='printView';document.body.appendChild(el)}
   el.innerHTML=`<h1>สรุปการเดินทางเยี่ยมลูกค้า · Go Wholesale ST.14</h1><div>${esc(sfShort(user))} · ${new Date(date).toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
   <div class="k"><div><b>${km1(g.m)} กม.</b>ระยะทางรวม</div><div><b>${A.length}</b>ร้านที่ Check-in</div><div><b>${hhmm(A[0].ts)}–${hhmm(A[A.length-1].ts)}</b>ช่วงเวลา${mins>0?` (${Math.floor(mins/60)} ชม. ${mins%60} น.)`:''}</div></div>
-  <table><tr><th>#</th><th>เวลา</th><th>ร้าน</th><th>ตำบล/อำเภอ</th><th>กม. จากร้านก่อนหน้า</th></tr>${A.map((x,i)=>{const r=stopRow(x,i);return `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${esc(r[2])} ${esc(r[3])}</td><td>${esc(r[4])}</td><td>${r[5].toFixed(1)}</td></tr>`}).join('')}</table>
-  <p style="font-size:11px;color:#555">คำนวณเป็นเส้นตรงระหว่างจุด Check-in ที่ต่อเนื่องกัน ไม่รวมช่วงออกจาก/กลับสาขา</p>`;
+  <table><tr><th>#</th><th>เวลา</th><th>ร้าน</th><th>ตำบล/อำเภอ</th><th>กม. จากจุดก่อนหน้า</th></tr>${g.hasB?`<tr><td></td><td></td><td>🏬 ออกจากสาขา Go Wholesale ระยอง</td><td></td><td>0.0</td></tr>`:''}${A.map((x,i)=>{const r=stopRow(x,i);return `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${esc(r[2])} ${esc(r[3])}</td><td>${esc(r[4])}</td><td>${r[5].toFixed(1)}</td></tr>`}).join('')}${g.hasB?`<tr><td></td><td></td><td>🏬 กลับสาขา Go Wholesale ระยอง</td><td></td><td>${km1(g.back)}</td></tr>`:''}</table>
+  <p style="font-size:11px;color:#555">คำนวณเป็นเส้นตรง: สาขา → ร้านตามลำดับ → กลับสาขา${g.hasB?'':' (ยังไม่ได้ตั้งพิกัดสาขา จึงนับเฉพาะระหว่างร้าน)'}</p>`;
   const done=()=>{window.removeEventListener('afterprint',done)};window.addEventListener('afterprint',done);
   window.print();
 }
@@ -606,7 +609,7 @@ async function fillTravelBox(){
     else{const U={};M.forEach(x=>{const o=U[x.user]||(U[x.user]={m:0,s:0,d:0});o.m+=x.m;o.s+=x.stops.length;o.d++});
       body=`<div class="kv"><span>ระยะทางรวมทั้งทีม</span><span><b>${km1(tot)}</b> กม.</span><span>ร้านที่ Check-in</span><span>${fmt(stops)} ร้าน</span></div><div style="overflow:auto;margin-top:8px"><table class="t"><tr><th>SF</th><th>วัน</th><th>ร้าน</th><th>กม.รวม</th><th>กม./วัน</th></tr>${Object.entries(U).sort((a,b)=>b[1].m-a[1].m).map(([k,o])=>`<tr><td>${k==='Admin'?'Admin':sfShort(k)}</td><td>${o.d}</td><td>${o.s}</td><td>${km1(o.m)}</td><td>${km1(o.m/o.d)}</td></tr>`).join('')}</table></div>`}
     box.innerHTML=`<h3>🚗 การเดินทางรวม · ${monTh}</h3><div class="field"><select id="trvM">${months.map(m=>`<option value="${m}"${m===mon?' selected':''}>${new Date(m+'-01').toLocaleDateString('th-TH',{month:'long',year:'numeric'})}</option>`).join('')}</select></div>${body}
-      <p class="mut" style="margin:8px 0 0">คำนวณเป็นเส้นตรงระหว่างจุด Check-in ที่ต่อเนื่องกันในแต่ละวัน (ไม่รวมช่วงออกจาก/กลับสาขา)</p><div class="acts"><button class="btn ghost" id="trvX">📗 Excel สรุปเดือนนี้</button></div>`;
+      <p class="mut" style="margin:8px 0 0">คำนวณเป็นเส้นตรง: สาขา Go Wholesale ระยอง → ร้านตามลำดับ → กลับสาขา${branchPt()?'':' (ยังไม่ได้ตั้งพิกัดสาขา — ตั้งได้ในหน้าแผนวันนี้)'}</p><div class="acts"><button class="btn ghost" id="trvX">📗 Excel สรุปเดือนนี้</button></div>`;
     $('#trvM').onchange=e=>{box.dataset.m=e.target.value;fillTravelBox()};
     $('#trvX').onclick=async()=>{try{await loadXlsx();const wb=XLSX.utils.book_new();
       const w1=XLSX.utils.aoa_to_sheet([['SF','วันที่','จำนวนร้าน','ระยะทาง (กม.)'],...M.slice().sort((a,b)=>a.date<b.date?-1:1).map(x=>[x.user==='Admin'?'Admin':sfShort(x.user),x.date,x.stops.length,+km1(x.m)]),['รวม','',stops,+km1(tot)]]);w1['!cols']=[{wch:10},{wch:12},{wch:12},{wch:16}];XLSX.utils.book_append_sheet(wb,w1,'รายวัน');
@@ -717,7 +720,7 @@ function buildPlan(sf,n,keep,skipped,area){
   const keepSet=new Set(keep),ex=new Set([...keep,...skipped]);
   const picks=planPool(sf,ex,area).slice(0,Math.max(0,n-keep.length));
   const ordered=orderPlan(picks,S.planPos);
-  return{date:todayStr(),sf,n,rest:planRest,area:area||'',ids:[...keep,...ordered.map(x=>x.c.id)],skipped};
+  return{date:todayStr(),sf,n,rest:planRest,area:area||'',manual:keep.filter(id=>!isToday(S.byId[id])),ids:[...keep,...ordered.map(x=>x.c.id)],skipped};
 }
 function renderPlan(regen){
   const el=$('#pPlan');if(!el||!S.all.length)return;
@@ -733,7 +736,7 @@ function renderPlan(regen){
   if(!sf){el.innerHTML=head+'<div class="box mut" style="text-align:center">เลือกพอร์ตเพื่อสร้างแผนเยี่ยม</div>';bindPlan();return}
   let st=lsGet(planKey(sf),null);
   if(regen||!st||st.date!==todayStr()||st.n!==planN||st.rest!==planRest||(st.area||'')!==area){
-    const keep=(st&&st.date===todayStr()?st.ids:[]).filter(id=>S.byId[id]&&isToday(S.byId[id]));
+    const man=st&&st.date===todayStr()?(st.manual||[]):[];const keep=(st&&st.date===todayStr()?st.ids:[]).filter(id=>S.byId[id]&&(isToday(S.byId[id])||man.includes(id)));
     st=buildPlan(sf,planN,keep,st&&st.date===todayStr()?st.skipped:[],area);lsSet(planKey(sf),st);
   }
   const items=st.ids.map(id=>S.byId[id]).filter(Boolean);
@@ -750,20 +753,36 @@ function renderPlan(regen){
   el.innerHTML=head.replace(/<\/div><\/div>$/,'</div>'+areaSel+'</div>')+`<div class="box"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><b>ความคืบหน้า ${done}/${items.length} ร้าน</b><span class="mut">${items.length?Math.round(done*100/items.length):0}%</span></div><div class="prog"><i style="width:${items.length?done*100/items.length:0}%"></i></div>
     <div class="acts"><button class="btn ghost" id="plPos">📡 เรียงจากตำแหน่งฉัน</button><button class="btn grey" id="plRegen">🔄 สร้างแผนใหม่</button><button class="btn grey" id="plAdd">➕ เพิ่ม 1 ร้าน</button><button class="btn grey" id="plExp">⬇️ CSV</button></div>
     <div id="plTrv" class="mut" style="margin-top:8px"></div>
+    <div class="field" style="margin-top:10px"><input id="plQ" placeholder="🔎 ค้นหาชื่อ/รหัสลูกค้า เพื่อเพิ่มเข้าแผน" autocomplete="off"><div id="plQR"></div></div>
     <p class="mut" style="margin:8px 0 0">${planRest?`🚫 ตัดร้านที่ Check-in ไปแล้วภายใน ${planRest} วัน ออกจากแผน ${fmt(S.all.filter(c=>c.sf===sf&&recentVisit(c)).length)} ร้าน (ยกเว้นร้านที่ถึงวันนัดติดตาม)<br>`:''}จัดลำดับจาก: นัดติดตามถึงกำหนด · ยังไม่เคยเยี่ยม · หยุดซื้อ · ช่องว่างโอกาส · ยอดซื้อสูง · ไม่ได้เยี่ยมนาน และจัดกลุ่มตามตำบลให้ใกล้กัน</p></div>`
     +(rows||'<div class="box mut" style="text-align:center">ไม่มีร้านที่ต้องเยี่ยมเพิ่มวันนี้ 🎉</div>');
   bindPlan(sf,st);fillPlanTravel(sf,done,items.length);
 }
+
+function branchUi(){const b=branchPt();
+  return b?`<div class="mut" style="margin-top:6px">🏬 จุดตั้งต้น/จุดกลับ: สาขา Go Wholesale ระยอง (${(+b.lat).toFixed(5)}, ${(+b.lng).toFixed(5)}) <a href="#" id="brChg">เปลี่ยน</a></div>`
+   :`<div class="box" style="margin-top:8px;border:1px dashed var(--red)"><b>🏬 ยังไม่ได้ตั้งพิกัดสาขา</b><div class="mut">ตั้งครั้งเดียวเพื่อนับระยะทาง สาขา → ร้าน → กลับสาขา</div><div class="acts"><button class="btn red" id="brGps">ตั้งเป็นตำแหน่งปัจจุบัน (ขณะอยู่ที่สาขา)</button></div><div class="acts"><input id="brTxt" placeholder="หรือวางพิกัดจาก Google Maps เช่น 12.6789, 101.2345" style="flex:1;min-width:0"><button class="btn grey" id="brSet">บันทึก</button></div></div>`}
+function bindBranch(){
+  const save=(lat,lng)=>{if(!isFinite(lat)||!isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)return toast('พิกัดไม่ถูกต้อง');lsSet('gw_branch',{lat,lng});S.travel=null;toast('บันทึกพิกัดสาขาแล้ว');renderPlan()};
+  const g=$('#brGps');if(g)g.onclick=async()=>{try{toast('กำลังหาตำแหน่ง…');const q=await getPos();save(q.lat,q.lng)}catch(e){toast(e.message,4000)}};
+  const t=$('#brSet');if(t)t.onclick=()=>{const m=($('#brTxt').value||'').match(/(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/);m?save(+m[1],+m[2]):toast('ใส่พิกัดรูปแบบ ละติจูด, ลองจิจูด')};
+  const c=$('#brChg');if(c)c.onclick=e=>{e.preventDefault();localStorage.removeItem('gw_branch');S.travel=null;renderPlan()};
+}
 async function fillPlanTravel(sf,done,n){
   const el=$('#plTrv');if(!el)return;
   try{const d=await getTravel(),g=trvOf(d,sf,todayStr());if(!$('#plTrv'))return;
-    el.innerHTML=(n&&done>=n?'<b style="color:var(--ok)">🎉 จบแผนวันนี้แล้ว</b><br>':'')+(g?`🚗 วันนี้เดินทางแล้ว <b>${km1(g.m)} กม.</b> (${g.stops.length} จุด Check-in)<div class="acts"><button class="btn red" id="plTX">📗 สรุปเดินทาง Excel</button><button class="btn ghost" id="plTP">📄 สรุปเดินทาง PDF</button></div>`:'ยังไม่มี Check-in พร้อมพิกัดวันนี้ — เมื่อ Check-in แล้วจะสรุประยะทางให้ที่นี่');
+    el.innerHTML=(n&&done>=n?'<b style="color:var(--ok)">🎉 จบแผนวันนี้แล้ว</b><br>':'')+(g?`🚗 วันนี้เดินทาง <b>${km1(g.m)} กม.</b> (${g.stops.length} จุด Check-in${g.hasB?` · ไป ${km1(g.stops[0].leg)} + กลับสาขา ${km1(g.back)}`:''})<div class="acts"><button class="btn red" id="plTX">📗 สรุปเดินทาง Excel</button><button class="btn ghost" id="plTP">📄 สรุปเดินทาง PDF</button></div>`:'ยังไม่มี Check-in พร้อมพิกัดวันนี้ — เมื่อ Check-in แล้วจะสรุประยะทางให้ที่นี่')+branchUi();
+    bindBranch(sf);
     if(g){$('#plTX').onclick=()=>exportTravelXlsx(sf,todayStr(),d);$('#plTP').onclick=()=>printTravel(sf,todayStr(),d)}
   }catch(e){}
 }
 function bindPlan(sf,st){
   const el=$('#pPlan');
   const sel=$('#plSf',el);if(sel)sel.onchange=e=>{S.planSf=e.target.value;renderPlan()};
+  $('#plQ',el).oninput=e=>{const q=e.target.value.trim().toLowerCase(),box=$('#plQR',el);if(q.length<2){box.innerHTML='';return}
+    const L=S.all.filter(c=>c.sf===sf&&(c.id+' '+(c.name||'')+' '+(V(c,'biz')||'')).toLowerCase().includes(q)).slice(0,8);
+    box.innerHTML=L.map(c=>{const inP=st.ids.includes(c.id),u=c.u||{},d=u.lastVisit?dayDiff(u.lastVisit.slice(0,10),todayStr()):null;
+      return `<div class="qr" style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #eee"><div style="flex:1;min-width:0"><div class="t">${esc(title(c))}</div><div class="s mut">${esc(c.id)} · ${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))}${d!=null?` · เยี่ยมล่าสุด ${d} วันก่อน`:''}</div></div>${inP?'<span class="tag ok">อยู่ในแผน</span>':`<button class="btn red" data-add="${esc(c.id)}" style="width:auto;padding:6px 10px">➕ เพิ่ม</button>`}</div>`}).join('')||'<div class="mut" style="padding:6px 0">ไม่พบลูกค้าในพอร์ตนี้</div>'};
   const ar=$('#plArea',el);if(ar)ar.onchange=e=>{lsSet('gw_plan_area_'+sf,e.target.value);renderPlan()};
   $('#plRest',el).onchange=e=>{planRest=+e.target.value;lsSet('gw_plan_rest',planRest);renderPlan()};
   $('#plN',el).onchange=e=>{planN=+e.target.value;lsSet('gw_plan_n',planN);renderPlan()};
@@ -778,7 +797,9 @@ function bindPlan(sf,st){
     const maxS=Math.max(1,...S.all.filter(c=>c.sf===sf).map(c=>c.s3m));
     const rows=[['ลำดับ','รหัสสมาชิก','ชื่อร้าน','ตำบล','อำเภอ','เบอร์โทร','เหตุผลที่ควรเยี่ยม','Google Maps']].concat(st.ids.map(id=>S.byId[id]).filter(Boolean).map((c,i)=>[i+1,c.id,title(c),V(c,'subd'),V(c,'dist'),V(c,'phone'),(planScore(c,maxS)?.R||[]).map(r=>r[1]).join(' / '),mapUrl(c)]));
     dl(new Blob(['﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}),`GW_Plan_${sfShort(sf)}_${stamp()}.csv`)};
-  el.onclick=e=>{const card=e.target.closest('.card');if(!card)return;const id=card.dataset.id,act=e.target.closest('[data-act]')?.dataset.act;
+  el.onclick=e=>{const ad=e.target.closest('[data-add]');
+    if(ad){const id=ad.dataset.add;if(!st.ids.includes(id)){st.ids.push(id);st.skipped=st.skipped.filter(x=>x!==id);st.manual=[...(st.manual||[]),id];st.n=planN=st.ids.length;lsSet('gw_plan_n',Math.min(planN,25));lsSet(planKey(sf),st)}return renderPlan()}
+    const card=e.target.closest('.card');if(!card)return;const id=card.dataset.id,act=e.target.closest('[data-act]')?.dataset.act;
     if(act==='ci')return openForm(S.byId[id],'CHECKIN');
     if(act==='skip'){st.skipped.push(id);st.ids=st.ids.filter(x=>x!==id);const x=planPool(sf,new Set([...st.ids,...st.skipped]),st.area)[0];if(x)st.ids.push(x.c.id);lsSet(planKey(sf),st);return renderPlan()}
     if(e.target.closest('.pmain'))openDetail(id)};
