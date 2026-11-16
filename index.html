@@ -33,6 +33,9 @@ textarea{min-height:70px;resize:vertical}
 .card .side{text-align:right;font-size:12px;color:var(--mut);white-space:nowrap}
 .card .side b{display:block;font-size:15px;color:var(--ink)}
 .card.out{border:2px solid var(--red);background:#fff1f1}
+.pnum{background:var(--red);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;font-size:14px}
+.card.done{opacity:.55}.card.done .pnum{background:var(--ok)}
+.acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.acts .btn{padding:7px 10px;font-size:13.5px;width:auto;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
 .card.vac{border:2px solid #e0a800;background:#fff9db}
 .tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .tag{font-size:11.5px;padding:2px 8px;border-radius:99px;background:#eef0f6;color:#46506a}
@@ -114,6 +117,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
 
   <div id="pDash" class="wrap hide"></div>
   <div id="pExport" class="wrap hide"></div>
+  <div id="pPlan" class="wrap hide"></div>
   <div id="pFind" class="wrap hide">
     <div class="box"><h3>ตรวจสอบว่าลูกค้าอยู่ในพอร์ตของใคร</h3>
       <input id="findQ" type="search" placeholder="พิมพ์ชื่อ / ชื่อร้าน / รหัสสมาชิก (อย่างน้อย 3 ตัวอักษร)">
@@ -123,6 +127,7 @@ table.t{width:100%;border-collapse:collapse;font-size:13px}table.t th,table.t td
 
   <nav class="bottom">
     <button data-tab="Find"><b>🔎</b>ค้นหาพอร์ต</button>
+    <button data-tab="Plan"><b>🗓️</b>แผนวันนี้</button>
     <button data-tab="List" class="on"><b>📋</b>รายชื่อ</button>
     <button data-tab="Dash"><b>📊</b>สรุปผล</button>
     <button data-tab="Export"><b>⬇️</b>Export</button>
@@ -305,7 +310,7 @@ async function login(sf,silent){
     if(S.role==='admin'&&sf!=='ADMIN')S.role='team'; // เลือกเป็น SF = เห็นเฉพาะพอร์ตนั้น
     lsSet('gw_user',{sf,pin:S.pin});
     show('vMain'); $('#hdUser').textContent=S.user.name+' ⎋'; $('#hdTitle').textContent=DEMO?'ST14 - Customer Checklist (ทดลอง)':'ST14 - Customer Checklist';
-    await loadData(); flushQueue();
+    await loadData(); flushQueue(); if(S.user.sf!=='ALL')document.querySelector('nav.bottom button[data-tab=Plan]').click();
   }catch(e){
     if(silent&&String(e.message).match(/fetch|network|Failed/i)){ // ออฟไลน์ + เคยล็อกอิน
       S.role='team';S.user={sf,name:sfShort(sf)};show('vMain');$('#hdUser').textContent=S.user.name+' ⎋';await loadData();return}
@@ -372,7 +377,7 @@ $('#list').onclick=e=>{const c=e.target.closest('.card');if(c)openDetail(c.datas
 let qT;$('#fQ').oninput=e=>{clearTimeout(qT);qT=setTimeout(()=>{S.filt.q=e.target.value;applyFilters()},200)};
 [['fStatus','status'],['fGrp','grp'],['fDist','dist'],['fSf','sf']].forEach(([id,k])=>$('#'+id).onchange=e=>{S.filt[k]=e.target.value;applyFilters()});
 $('#fSort').onchange=async e=>{S.filt.sort=e.target.value;if(S.filt.sort==='near'){try{S.pos=await getPos()}catch(err){toast(err.message,4000);S.filt.sort='name';e.target.value='name'}}applyFilters()};
-document.querySelectorAll('nav.bottom button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.tab;document.querySelectorAll('nav.bottom button').forEach(x=>x.classList.toggle('on',x===b));['List','Find','Dash','Export'].forEach(t=>$('#p'+t).classList.toggle('hide',t!==S.tab));if(S.tab==='Dash')renderDash();window.scrollTo(0,0)});
+document.querySelectorAll('nav.bottom button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.tab;document.querySelectorAll('nav.bottom button').forEach(x=>x.classList.toggle('on',x===b));['List','Find','Plan','Dash','Export'].forEach(t=>$('#p'+t).classList.toggle('hide',t!==S.tab));if(S.tab==='Dash')renderDash();if(S.tab==='Plan')renderPlan();window.scrollTo(0,0)});
 
 /* ============ SHEETS ============ */
 function openSheet(html,onClose){const bg=document.createElement('div');bg.className='sheet-bg';bg.innerHTML=`<div class="sheet">${html}</div>`;$('#sheetRoot').appendChild(bg);
@@ -583,7 +588,7 @@ async function exportLog(){
     const ws=XLSX.utils.aoa_to_sheet([j.cols,...j.rows]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Log');XLSX.writeFile(wb,fname('Log','xlsx'))
   }catch(e){hideLoading();toast(e.message,5000)}
 }
-const _apply=applyFilters;applyFilters=function(){_apply();const n=$('#xN');if(n)n.textContent=fmt(S.view.length)};
+const _apply=applyFilters;applyFilters=function(){_apply();if(S.tab==='Plan')renderPlan();const n=$('#xN');if(n)n.textContent=fmt(S.view.length)};
 
 /* ============ ค้นหาพอร์ต ============ */
 let fT,fSeq=0;
@@ -596,6 +601,105 @@ $('#findQ').oninput=e=>{clearTimeout(fT);const q=e.target.value.trim();const out
           <div class="tags">${r.pdel?'<span class="tag warn">รอ Delete</span>':''}${r.inact?'<span class="tag warn">Inactive</span>':''}${r.last?`<span class="tag">ซื้อล่าสุด ${esc(r.last)}</span>`:''}</div></div>
           <div class="side"><span class="tag ${r.sf?(mine?'ok':'blue'):'warn'}" style="font-size:14px;padding:5px 12px">${r.sf?(mine?'พอร์ตของคุณ':'พอร์ต '+sfShort(r.sf)):'ยังไม่มีผู้ดูแล'}</span></div></div>`}).join('')||'<div class="box mut" style="text-align:center">ไม่พบลูกค้า</div>'
     }catch(err){out.innerHTML=`<div class="box mut">ค้นหาไม่ได้: ${esc(err.message)}</div>`}},350)};
+
+
+/* ============ แผนเยี่ยมรายวัน (สร้างอัตโนมัติ) ============ */
+const PLAN_N=[8,10,12,15,20,25];
+let planN=lsGet('gw_plan_n',12);
+const planKey=sf=>'gw_plan_'+sf;
+const planScope=()=>S.user.sf==='ALL'?(S.planSf||''):S.user.sf;
+const dayDiff=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
+const isToday=c=>(c.u?.lastVisit||'').startsWith(todayStr());
+// ให้คะแนนความสำคัญของร้าน — คะแนนสูง = ควรเยี่ยมก่อน
+function planScore(c,maxS){
+  const u=c.u||{},t=todayStr(),R=[];let sc=0;const st=u.cust_status||'';
+  if(/เลิกกิจการ|ย้ายที่ตั้ง/.test(st))return null;
+  const due=u.next_follow&&u.next_follow<=t;
+  if(due){const d=dayDiff(u.next_follow,t);sc+=100+Math.min(20,d);R.push(['bad','นัดติดตาม'+(d>0?` เกิน ${d} วัน`:' วันนี้')])}
+  if(!u.visits){sc+=35;R.push(['blue','ยังไม่เคยเยี่ยม'])}
+  else{const d=dayDiff((u.lastVisit||'').slice(0,10),t);sc+=Math.min(25,d*0.8);if(d<=7&&!due)sc-=50;if(d>=14)R.push(['',`เยี่ยมล่าสุด ${d} วันก่อน`]);
+    if(/ร้านปิด|ไม่พบร้าน|ไม่ติด/.test(u.lastRes||'')&&d>=2){sc+=15;R.push(['warn','ครั้งก่อนไม่พบ'])}}
+  if(c.ytd>0&&c.s6+c.s7===0){sc+=45;R.push(['warn',`หยุดซื้อ ${MONTHS[5]}–${MONTHS[6].replace('*','')}`])}
+  else if(c.ytd===0){sc+=25;R.push(['','ยังไม่เคยซื้อปีนี้'])}
+  const b=bpOf(c);if(b&&b.gap>0){sc+=Math.min(30,b.gap/3000);if(b.gap>=20000)R.push(['ok','ช่องว่าง '+fmt(b.gap)])}
+  sc+=20*Math.sqrt(Math.max(0,c.s3m)/maxS);if(c.s3m>0&&c.s3m>=maxS*0.5)R.push(['ok','ลูกค้ามูลค่าสูง'])
+  if(c.pdel||c.inact){sc-=60;R.push(['warn','รอ Delete/Inactive'])}
+  if(/ปิดชั่วคราว/.test(st))sc-=30;
+  return{sc,R};
+}
+function planPool(sf,exclude){
+  const pool=S.all.filter(c=>c.sf===sf&&!isToday(c)&&!exclude.has(c.id));
+  const maxS=Math.max(1,...pool.map(c=>c.s3m));
+  return pool.map(c=>({c,...(planScore(c,maxS)||{sc:null})})).filter(x=>x.sc!==null).sort((a,b)=>b.sc-a.sc);
+}
+// เรียงเส้นทาง: จัดกลุ่มตามตำบล/อำเภอ → ในกลุ่มใช้ร้านที่มีหมุดวิ่งจากใกล้ไปไกล (ถ้ามีตำแหน่งปัจจุบัน/หมุดร้าน)
+function orderPlan(items,pos){
+  const G={};items.forEach(x=>{const k=(V(x.c,'dist')||'')+'|'+(V(x.c,'subd')||'-');(G[k]=G[k]||[]).push(x)});
+  const gs=Object.values(G);gs.forEach(g=>g.sort((a,b)=>b.sc-a.sc));
+  const dOf=g=>{let m=1e12;g.forEach(x=>{const q=shopPin(x.c);if(q&&pos)m=Math.min(m,hav(pos.lat,pos.lng,q.lat,q.lng))});return m};
+  gs.sort((a,b)=>{const da=dOf(a),db=dOf(b);return da!==db?da-db:Math.max(...b.map(x=>x.sc))-Math.max(...a.map(x=>x.sc))});
+  const out=[];let last=pos||null;
+  gs.forEach(g=>{const pool=g.filter(x=>shopPin(x.c)),rest=g.filter(x=>!shopPin(x.c));let cur=last;
+    while(pool.length){let bi=0;if(cur){let bd=1e12;pool.forEach((x,i)=>{const q=shopPin(x.c),d=hav(cur.lat,cur.lng,q.lat,q.lng);if(d<bd){bd=d;bi=i}})}const x=pool.splice(bi,1)[0];out.push(x);cur=shopPin(x.c)}
+    if(cur)last=cur;rest.forEach(x=>out.push(x))});
+  return out;
+}
+function buildPlan(sf,n,keep,skipped){
+  const keepSet=new Set(keep),ex=new Set([...keep,...skipped]);
+  const picks=planPool(sf,ex).slice(0,Math.max(0,n-keep.length));
+  const ordered=orderPlan(picks,S.planPos);
+  return{date:todayStr(),sf,n,ids:[...keep,...ordered.map(x=>x.c.id)],skipped};
+}
+function renderPlan(regen){
+  const el=$('#pPlan');if(!el||!S.all.length)return;
+  const sf=planScope();
+  const sfs=[...new Set(S.all.map(c=>c.sf).filter(Boolean))].sort();
+  const head=`<div class="box"><h3>🗓️ แผนเยี่ยมลูกค้า · ${new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</h3>
+    ${S.user.sf==='ALL'?`<div class="field"><select id="plSf"><option value="">— เลือกพอร์ต SF —</option>${sfs.map(x=>`<option value="${x}"${x===sf?' selected':''}>${sfShort(x)}</option>`).join('')}</select></div>`:''}
+    <div style="display:flex;gap:8px;align-items:center"><label class="mut" style="white-space:nowrap">จำนวนร้านต่อวัน</label><select id="plN" style="width:auto">${PLAN_N.map(x=>`<option${x===planN?' selected':''}>${x}</option>`).join('')}</select></div></div>`;
+  if(!sf){el.innerHTML=head+'<div class="box mut" style="text-align:center">เลือกพอร์ตเพื่อสร้างแผนเยี่ยม</div>';bindPlan();return}
+  let st=lsGet(planKey(sf),null);
+  if(regen||!st||st.date!==todayStr()||st.n!==planN){
+    const keep=(st&&st.date===todayStr()?st.ids:[]).filter(id=>S.byId[id]&&isToday(S.byId[id]));
+    st=buildPlan(sf,planN,keep,st&&st.date===todayStr()?st.skipped:[]);lsSet(planKey(sf),st);
+  }
+  const items=st.ids.map(id=>S.byId[id]).filter(Boolean);
+  const done=items.filter(isToday).length;
+  const maxS=Math.max(1,...S.all.filter(c=>c.sf===sf).map(c=>c.s3m));
+  const rows=items.map((c,i)=>{
+    const d=isToday(c),sc=planScore(c,maxS),R=(d?[['ok','✓ เยี่ยมแล้ววันนี้']]:(sc?sc.R:[])),q=shopPin(c);
+    const dist=(S.planPos&&q)?`<span class="tag blue">${fmtDist(hav(S.planPos.lat,S.planPos.lng,q.lat,q.lng))}</span>`:'';
+    const ph=V(c,'phone'),nav=q?`https://www.google.com/maps/dir/?api=1&destination=${q.lat},${q.lng}`:mapUrl(c);
+    return `<div class="card${d?' done':''}" data-id="${esc(c.id)}"><div class="pnum">${d?'✓':i+1}</div><div class="main"><div class="t pmain" style="cursor:pointer">${esc(title(c))}</div>
+      <div class="s">${esc(c.id)} · ${esc(c.seg||c.grp)}</div><div class="s">${esc([V(c,'subd'),V(c,'dist')].filter(Boolean).join(' / '))||'—'}</div>
+      <div class="tags">${R.slice(0,4).map(([k,t])=>`<span class="tag ${k}">${esc(t)}</span>`).join('')}${dist}</div>
+      <div class="acts">${d?'':`<button class="btn red" data-act="ci">📍 Check-in</button>`}<a class="btn ghost" target="_blank" rel="noopener" href="${nav}">🗺️ นำทาง</a>${ph?`<a class="btn ghost" href="tel:${esc(ph)}">📞</a>`:''}${d?'':`<button class="btn grey" data-act="skip">⏭️ ข้าม</button>`}</div></div></div>`}).join('');
+  el.innerHTML=head+`<div class="box"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><b>ความคืบหน้า ${done}/${items.length} ร้าน</b><span class="mut">${items.length?Math.round(done*100/items.length):0}%</span></div><div class="prog"><i style="width:${items.length?done*100/items.length:0}%"></i></div>
+    <div class="acts"><button class="btn ghost" id="plPos">📡 เรียงจากตำแหน่งฉัน</button><button class="btn grey" id="plRegen">🔄 สร้างแผนใหม่</button><button class="btn grey" id="plAdd">➕ เพิ่ม 1 ร้าน</button><button class="btn grey" id="plExp">⬇️ CSV</button></div>
+    <p class="mut" style="margin:8px 0 0">จัดลำดับจาก: นัดติดตามถึงกำหนด · ยังไม่เคยเยี่ยม · หยุดซื้อ · ช่องว่างโอกาส · ยอดซื้อสูง · ไม่ได้เยี่ยมนาน และจัดกลุ่มตามตำบลให้ใกล้กัน</p></div>`
+    +(rows||'<div class="box mut" style="text-align:center">ไม่มีร้านที่ต้องเยี่ยมเพิ่มวันนี้ 🎉</div>');
+  bindPlan(sf,st);
+}
+function bindPlan(sf,st){
+  const el=$('#pPlan');
+  const sel=$('#plSf',el);if(sel)sel.onchange=e=>{S.planSf=e.target.value;renderPlan()};
+  $('#plN',el).onchange=e=>{planN=+e.target.value;lsSet('gw_plan_n',planN);renderPlan()};
+  if(!sf)return;
+  $('#plRegen',el).onclick=()=>{if(confirm('สร้างแผนวันนี้ใหม่? (ร้านที่เยี่ยมแล้วยังอยู่ในแผน)'))renderPlan(true)};
+  $('#plAdd',el).onclick=()=>{const x=planPool(sf,new Set([...st.ids,...st.skipped]))[0];if(!x)return toast('ไม่มีร้านเหลือให้เพิ่ม');st.ids.push(x.c.id);st.n=planN=st.ids.length;lsSet('gw_plan_n',Math.min(planN,25));lsSet(planKey(sf),st);renderPlan()};
+  $('#plPos',el).onclick=async()=>{try{toast('กำลังหาตำแหน่ง…');S.planPos=await getPos();
+      const keep=st.ids.filter(id=>isToday(S.byId[id])),rest=st.ids.filter(id=>!isToday(S.byId[id]));
+      const maxS=Math.max(1,...S.all.filter(c=>c.sf===sf).map(c=>c.s3m));
+      st.ids=[...keep,...orderPlan(rest.map(id=>({c:S.byId[id],sc:(planScore(S.byId[id],maxS)||{sc:0}).sc})),S.planPos).map(x=>x.c.id)];lsSet(planKey(sf),st);renderPlan();toast('เรียงลำดับตามตำแหน่งปัจจุบันแล้ว (ร้านที่มีหมุดเท่านั้นที่เรียงตามระยะทางได้)',4000)}catch(e){toast(e.message,4000)}};
+  $('#plExp',el).onclick=()=>{const q=v=>{v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+    const maxS=Math.max(1,...S.all.filter(c=>c.sf===sf).map(c=>c.s3m));
+    const rows=[['ลำดับ','รหัสสมาชิก','ชื่อร้าน','ตำบล','อำเภอ','เบอร์โทร','เหตุผลที่ควรเยี่ยม','Google Maps']].concat(st.ids.map(id=>S.byId[id]).filter(Boolean).map((c,i)=>[i+1,c.id,title(c),V(c,'subd'),V(c,'dist'),V(c,'phone'),(planScore(c,maxS)?.R||[]).map(r=>r[1]).join(' / '),mapUrl(c)]));
+    dl(new Blob(['﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}),`GW_Plan_${sfShort(sf)}_${stamp()}.csv`)};
+  el.onclick=e=>{const card=e.target.closest('.card');if(!card)return;const id=card.dataset.id,act=e.target.closest('[data-act]')?.dataset.act;
+    if(act==='ci')return openForm(S.byId[id],'CHECKIN');
+    if(act==='skip'){st.skipped.push(id);st.ids=st.ids.filter(x=>x!==id);const x=planPool(sf,new Set([...st.ids,...st.skipped]))[0];if(x)st.ids.push(x.c.id);lsSet(planKey(sf),st);return renderPlan()}
+    if(e.target.closest('.pmain'))openDetail(id)};
+}
 
 /* ============ BOOT ============ */
 syncBadge();initLogin();
